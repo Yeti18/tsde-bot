@@ -3,9 +3,9 @@
   "clientId": "TU_CLIENT_ID_AQUI",
   "guildId": "TU_GUILD_ID_AQUI",
   "canales": {
-    "eventos": "ID_CANAL_EVENTOS",
-    "logs": "ID_CANAL_LOGS_SERVIDOR",
-    "anuncios": "ID_CANAL_ANUNCIOS"
+    "eventos": "1506614381109186660",
+    "logs": "1506292040722415807",
+    "anuncios": "1506279235835133982"
   },
   "rcon": {
     "ip": "",
@@ -13,7 +13,7 @@
     "password": ""
   },
   "roles": {
-    "admin": "ID_ROL_ADMIN",
-    "moderador": "ID_ROL_MODERADOR"
+    "admin": "1506313165833769051",
+    "moderador": "1506418396852654291"
   }
 }
