@@ -1,0 +1,19 @@
+{
+  "token": "TU_TOKEN_AQUI",
+  "clientId": "TU_CLIENT_ID_AQUI",
+  "guildId": "TU_GUILD_ID_AQUI",
+  "canales": {
+    "eventos": "ID_CANAL_EVENTOS",
+    "logs": "ID_CANAL_LOGS_SERVIDOR",
+    "anuncios": "ID_CANAL_ANUNCIOS"
+  },
+  "rcon": {
+    "ip": "",
+    "port": 27020,
+    "password": ""
+  },
+  "roles": {
+    "admin": "ID_ROL_ADMIN",
+    "moderador": "ID_ROL_MODERADOR"
+  }
+}
