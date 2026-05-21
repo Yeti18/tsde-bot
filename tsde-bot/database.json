@@ -1,5 +1,17 @@
 {
+  "jugadores": {},
   "eventos_activos": {},
+  "torneos_activos": {},
+  "historial_eventos": [],
   "penalizados": [],
-  "historial_eventos": []
+  "laberinto": {
+    "evento_activo": null,
+    "resultados": []
+  },
+  "votaciones": {
+    "sugerencias_pendientes": [],
+    "votos": {}
+  },
+  "polls": {},
+  "mercado": {}
 }
