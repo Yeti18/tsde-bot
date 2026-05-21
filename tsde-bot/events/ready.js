@@ -1,8 +1,15 @@
+const { iniciarStats } = require('../modules/statsEngine.js');
+const { iniciarVotaciones } = require('../modules/votacionesEngine.js');
+
 module.exports = {
     name: 'ready',
     once: true,
-    execute(client) {
+    async execute(client) {
         console.log(`✅ TSDE Bot conectado como ${client.user.tag}`);
         client.user.setActivity('TSDE Arkeanos 🦖', { type: 0 });
+
+        // Arrancar sistemas automáticos
+        await iniciarStats(client);
+        await iniciarVotaciones(client);
     }
 };

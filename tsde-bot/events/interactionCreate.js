@@ -6,7 +6,6 @@ module.exports = {
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
             if (!command) return;
-
             try {
                 await command.execute(interaction, client);
             } catch (error) {
@@ -24,47 +23,31 @@ module.exports = {
         // --- BOTONES ---
         if (interaction.isButton()) {
             const id = interaction.customId;
-
-            // Módulo Laberinto
-            if (id.startsWith('lab_')) {
-                const engine = require('../modules/laberintoEngine.js');
-                return engine.handleButton(interaction, client);
-            }
-
-            // Módulo Eventos / Torneos
-            if (id.startsWith('evt_')) {
-                const engine = require('../modules/eventEngine.js');
-                return engine.handleButton(interaction, client);
-            }
-
-            // Módulo Torneos / Bracket
-            if (id.startsWith('trn_')) {
-                const engine = require('../modules/torneoEngine.js');
-                return engine.handleButton(interaction, client);
-            }
-
-            // AQUÍ se añaden futuros módulos sin tocar nada más:
-            // if (id.startsWith('mer_')) { require('../modules/mercadoEngine.js').handleButton(...) }
+            if (id.startsWith('lab_')) return require('../modules/laberintoEngine.js').handleButton(interaction, client);
+            if (id.startsWith('evt_')) return require('../modules/eventEngine.js').handleButton(interaction, client);
+            if (id.startsWith('trn_')) return require('../modules/torneoEngine.js').handleButton(interaction, client);
+            if (id.startsWith('reg_')) return require('../modules/reglasEngine.js').handleButton(interaction, client);
+            if (id.startsWith('vot_')) return require('../modules/votacionesEngine.js').handleButton(interaction, client);
+            if (id.startsWith('pol_')) return require('../modules/pollEngine.js').handleButton(interaction, client);
+            if (id.startsWith('mer_')) return require('../modules/mercadoEngine.js').handleButton(interaction, client);
         }
 
         // --- SELECT MENUS ---
         if (interaction.isStringSelectMenu()) {
             const id = interaction.customId;
-
-            if (id.startsWith('evt_')) {
-                const engine = require('../modules/eventEngine.js');
-                return engine.handleSelect(interaction, client);
-            }
+            if (id.startsWith('lab_')) return require('../modules/laberintoEngine.js').handleSelect(interaction, client);
+            if (id.startsWith('evt_')) return require('../modules/eventEngine.js').handleSelect(interaction, client);
         }
 
         // --- MODALES ---
         if (interaction.isModalSubmit()) {
             const id = interaction.customId;
-
-            if (id.startsWith('evt_')) {
-                const engine = require('../modules/eventEngine.js');
-                return engine.handleModal(interaction, client);
-            }
+            if (id.startsWith('reg_')) return require('../modules/reglasEngine.js').handleModal(interaction, client);
+            if (id.startsWith('lab_')) return require('../modules/laberintoEngine.js').handleModal(interaction, client);
+            if (id.startsWith('evt_')) return require('../modules/eventEngine.js').handleModal(interaction, client);
+            if (id.startsWith('vot_')) return require('../modules/votacionesEngine.js').handleModal(interaction, client);
+            if (id.startsWith('pol_')) return require('../modules/pollEngine.js').handleModal(interaction, client);
+            if (id.startsWith('mer_')) return require('../modules/mercadoEngine.js').handleModal(interaction, client);
         }
     }
 };
