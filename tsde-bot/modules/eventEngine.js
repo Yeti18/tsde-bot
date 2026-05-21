@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const fs = require('fs');
 const rcon = require('./rconHelper.js');
+const { programarRecordatorios, cancelarRecordatorios, parsearFecha } = require('./recordatoriosEngine.js');
 
 const DB_PATH = './database.json';
 
@@ -115,10 +116,18 @@ async function mostrarModalCrearEvento(interaction) {
         new ActionRowBuilder().addComponents(
             new TextInputBuilder()
                 .setCustomId('fecha')
-                .setLabel('Fecha y hora')
+                .setLabel('Fecha visible (texto libre)')
                 .setPlaceholder('Ej: Sábado 24 de mayo a las 21:00h')
                 .setStyle(TextInputStyle.Short)
                 .setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('fecha_timestamp')
+                .setLabel('Fecha recordatorios (DD/MM/AAAA HH:MM)')
+                .setPlaceholder('Ej: 24/05/2026 21:00  — deja vacío si no quieres recordatorios')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(false)
         ),
         new ActionRowBuilder().addComponents(
             new TextInputBuilder()
@@ -134,14 +143,6 @@ async function mostrarModalCrearEvento(interaction) {
                 .setLabel('Plazas máximas (deja vacío = ilimitadas)')
                 .setPlaceholder('Ej: 16')
                 .setStyle(TextInputStyle.Short)
-                .setRequired(false)
-        ),
-        new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-                .setCustomId('descripcion')
-                .setLabel('Descripción / Reglas del evento')
-                .setPlaceholder('Describe las reglas, mecánicas y premios...')
-                .setStyle(TextInputStyle.Paragraph)
                 .setRequired(false)
         )
     );
@@ -160,7 +161,7 @@ async function handleModal(interaction, client) {
         const fecha = interaction.fields.getTextInputValue('fecha');
         const premio = interaction.fields.getTextInputValue('premio');
         const limiteRaw = interaction.fields.getTextInputValue('limite');
-        const descripcion = interaction.fields.getTextInputValue('descripcion');
+        const fecha_timestamp = interaction.fields.getTextInputValue('fecha_timestamp') || null;
 
         const limite = limiteRaw ? parseInt(limiteRaw) : null;
         const id = Date.now().toString();
@@ -170,7 +171,7 @@ async function handleModal(interaction, client) {
             titulo,
             fecha,
             premio,
-            descripcion,
+            fecha_timestamp,
             limite,
             inscritos: [],
             lista_espera: [],
@@ -192,6 +193,11 @@ async function handleModal(interaction, client) {
         guardarDB(db);
 
         await rcon.broadcast(`NUEVO EVENTO: ${titulo} - ${fecha}. Inscribete en Discord!`);
+
+        // Programar recordatorios si se proporcionó fecha
+        if (fecha_timestamp) {
+            await programarRecordatorios(client, db.eventos_activos[id]);
+        }
 
         await interaction.reply({
             content: `✅ Evento **${titulo}** creado y publicado en <#${config.canales.eventos}>`,
@@ -339,6 +345,7 @@ async function handleButton(interaction, client) {
 
         // Guardar en historial
         db.historial_eventos.push({ ...evento, estado: 'cancelado', cancelado_en: new Date().toISOString() });
+        cancelarRecordatorios(eventoId);
         delete db.eventos_activos[eventoId];
         guardarDB(db);
 
