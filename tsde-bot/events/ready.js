@@ -1,5 +1,6 @@
 const { iniciarStats } = require('../modules/statsEngine.js');
 const { iniciarVotaciones } = require('../modules/votacionesEngine.js');
+const { iniciarMonitorServidor } = require('../modules/servidorEngine.js');
 
 module.exports = {
     name: 'ready',
@@ -11,5 +12,6 @@ module.exports = {
         // Arrancar sistemas automáticos
         await iniciarStats(client);
         await iniciarVotaciones(client);
+        await iniciarMonitorServidor(client);
     }
 };
