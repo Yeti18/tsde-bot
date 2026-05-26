@@ -5,27 +5,45 @@ const config = require('../config.json');
 let mensajeEstadoId = null;
 let mensajeJugadoresId = null;
 let intervalo = null;
+let servidorCaidoAvisado = false;
+
+// Datos del servidor desde config
+const SERVIDOR = config.servidor || {
+    nombre: 'TSDE Arkeanos',
+    mapa: 'Ragnarok',
+    maxJugadores: 70,
+    region: 'EU'
+};
 
 // --- RCON ---
+
+async function ejecutarComandoRcon(comando) {
+    const rcon = new Rcon({
+        host: config.rcon.ip,
+        port: config.rcon.port,
+        password: config.rcon.password,
+        timeout: 8000
+    });
+
+    try {
+        await rcon.connect();
+        const respuesta = await rcon.send(comando);
+        await rcon.end();
+        return respuesta;
+    } catch (error) {
+        try { await rcon.end(); } catch {}
+        throw error;
+    }
+}
 
 async function consultarServidor() {
     if (!config.rcon.ip || !config.rcon.password) return null;
 
     try {
-        const rcon = new Rcon({
-            host: config.rcon.ip,
-            port: config.rcon.port,
-            password: config.rcon.password,
-            timeout: 5000
-        });
-
-        await rcon.connect();
-        const respuesta = await rcon.send('listplayers');
-        const uptime = await rcon.send('getgamelog');
-        await rcon.end();
-
-        return { online: true, jugadores: parsearJugadores(respuesta) };
-
+        const respuesta = await ejecutarComandoRcon('ListPlayers');
+        console.log(`[SRV] Respuesta RCON raw: "${respuesta}"`);
+        const jugadores = parsearJugadores(respuesta);
+        return { online: true, jugadores };
     } catch (error) {
         console.log(`[SRV] Servidor no responde: ${error.message}`);
         return { online: false, jugadores: [] };
@@ -33,15 +51,39 @@ async function consultarServidor() {
 }
 
 function parsearJugadores(respuesta) {
-    if (!respuesta || respuesta.includes('No Players')) return [];
+    if (!respuesta) return [];
 
-    const lineas = respuesta.split('\n').filter(l => l.trim().length > 0);
+    const textoLimpio = respuesta.trim();
+
+    // ARK ASA devuelve esto cuando no hay jugadores
+    if (
+        textoLimpio === '' ||
+        textoLimpio.toLowerCase().includes('no players') ||
+        textoLimpio.toLowerCase().includes('no hay jugadores')
+    ) {
+        return [];
+    }
+
     const jugadores = [];
+    const lineas = textoLimpio.split('\n');
 
     for (const linea of lineas) {
-        // Formato: "0. NombreJugador, STEAMID"
-        const match = linea.match(/\d+\.\s+(.+?),/);
-        if (match) jugadores.push(match[1].trim());
+        const limpia = linea.trim();
+        if (!limpia) continue;
+
+        // Formato ARK: "0. NombreJugador, SteamID64"
+        const match = limpia.match(/^\d+\.\s+(.+?),\s*\d+/);
+        if (match) {
+            jugadores.push(match[1].trim());
+            continue;
+        }
+
+        // Formato alternativo sin SteamID
+        const match2 = limpia.match(/^\d+\.\s+(.+)$/);
+        if (match2) {
+            const nombre = match2[1].replace(/,.*$/, '').trim();
+            if (nombre) jugadores.push(nombre);
+        }
     }
 
     return jugadores;
@@ -50,162 +92,137 @@ function parsearJugadores(respuesta) {
 // --- EMBEDS ---
 
 function construirEmbedEstado(info) {
-    const ahora = new Date();
-    const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    const hora = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
     if (info.online) {
         return new EmbedBuilder()
-            .setTitle('🟢 TSDE Arkeanos — EN LÍNEA')
+            .setTitle(`🟢 ${SERVIDOR.nombre} — EN LÍNEA`)
             .setColor(0x2ECC71)
             .addFields(
-                { name: '🗺️ Mapa', value: 'Ragnarok', inline: true },
-                { name: '👥 Jugadores', value: `${info.jugadores.length}/32`, inline: true },
-                { name: '🌍 Región', value: 'EU', inline: true }
+                { name: '🗺️ Mapa', value: SERVIDOR.mapa, inline: true },
+                { name: '👥 Jugadores', value: `${info.jugadores.length}/${SERVIDOR.maxJugadores}`, inline: true },
+                { name: '🌍 Región', value: SERVIDOR.region, inline: true }
             )
-            .setFooter({ text: `Actualizado a las ${hora} · Se actualiza cada 2 minutos` })
-            .setTimestamp();
-    } else {
-        return new EmbedBuilder()
-            .setTitle('🔴 TSDE Arkeanos — FUERA DE LÍNEA')
-            .setColor(0xE74C3C)
-            .setDescription('El servidor está caído o en mantenimiento.\nConsulta #anuncios para más información.')
-            .setFooter({ text: `Última comprobación: ${hora}` })
+            .setFooter({ text: `Actualizado a las ${hora} · Cada 2 minutos` })
             .setTimestamp();
     }
+
+    return new EmbedBuilder()
+        .setTitle(`🔴 ${SERVIDOR.nombre} — FUERA DE LÍNEA`)
+        .setColor(0xE74C3C)
+        .setDescription('El servidor está caído o en mantenimiento.\nConsulta #anuncios para más información.')
+        .setFooter({ text: `Última comprobación: ${hora}` })
+        .setTimestamp();
 }
 
 function construirEmbedJugadores(info) {
-    const ahora = new Date();
-    const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    const hora = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
     const embed = new EmbedBuilder()
-        .setTitle('👥 Jugadores en TSDE Arkeanos')
+        .setTitle(`👥 Jugadores en ${SERVIDOR.nombre}`)
         .setColor(info.online ? 0x3498DB : 0x95A5A6)
-        .setFooter({ text: `Actualizado a las ${hora} · Se actualiza cada 2 minutos` })
+        .setFooter({ text: `Actualizado a las ${hora} · Cada 2 minutos` })
         .setTimestamp();
 
     if (!info.online) {
-        embed.setDescription('🔴 Servidor offline — sin datos de jugadores');
+        embed.setDescription('🔴 Servidor offline — sin datos');
         return embed;
     }
 
     if (info.jugadores.length === 0) {
         embed.setDescription('El servidor está vacío.\n\n¡Sé el primero en conectarte! 🦖');
-        embed.addFields({ name: '👥 Conectados', value: '0/32', inline: true });
+        embed.addFields({ name: '👥 Conectados', value: `0/${SERVIDOR.maxJugadores}`, inline: true });
         return embed;
     }
 
     const lista = info.jugadores.map((j, i) => `${i + 1}. 🦖 ${j}`).join('\n');
-
     embed.setDescription(lista);
     embed.addFields(
-        { name: '👥 Conectados', value: `${info.jugadores.length}/32`, inline: true },
-        { name: '🗺️ Mapa', value: 'Ragnarok', inline: true }
+        { name: '👥 Conectados', value: `${info.jugadores.length}/${SERVIDOR.maxJugadores}`, inline: true },
+        { name: '🗺️ Mapa', value: SERVIDOR.mapa, inline: true }
     );
 
     return embed;
 }
 
+// --- ACTUALIZAR MENSAJE EN CANAL ---
+
+async function actualizarMensaje(client, canalId, mensajeIdRef, embed) {
+    const canal = await client.channels.fetch(canalId);
+
+    if (mensajeIdRef.id) {
+        try {
+            const msg = await canal.messages.fetch(mensajeIdRef.id);
+            await msg.edit({ embeds: [embed] });
+            return;
+        } catch {
+            mensajeIdRef.id = null;
+        }
+    }
+
+    // Buscar mensaje existente del bot
+    const mensajes = await canal.messages.fetch({ limit: 10 });
+    const existente = mensajes.find(m => m.author.id === client.user.id);
+    if (existente) {
+        await existente.edit({ embeds: [embed] });
+        mensajeIdRef.id = existente.id;
+    } else {
+        const msg = await canal.send({ embeds: [embed] });
+        mensajeIdRef.id = msg.id;
+    }
+}
+
 // --- ACTUALIZAR CANALES ---
+
+const refEstado = { id: null };
+const refJugadores = { id: null };
 
 async function actualizarCanales(client) {
     const info = await consultarServidor();
+    console.log(`[SRV] Online: ${info.online} | Jugadores: ${JSON.stringify(info.jugadores)}`);
 
-    // Actualizar #estado-servidor
+    // Estado servidor
     if (config.canales.estado) {
         try {
-            const canal = await client.channels.fetch(config.canales.estado);
-            const embed = construirEmbedEstado(info);
-
-            if (mensajeEstadoId) {
-                try {
-                    const msg = await canal.messages.fetch(mensajeEstadoId);
-                    await msg.edit({ embeds: [embed] });
-                } catch {
-                    const msg = await canal.send({ embeds: [embed] });
-                    mensajeEstadoId = msg.id;
-                }
-            } else {
-                // Buscar mensaje existente del bot
-                const mensajes = await canal.messages.fetch({ limit: 5 });
-                const existente = mensajes.find(m => m.author.id === client.user.id);
-                if (existente) {
-                    await existente.edit({ embeds: [embed] });
-                    mensajeEstadoId = existente.id;
-                } else {
-                    const msg = await canal.send({ embeds: [embed] });
-                    mensajeEstadoId = msg.id;
-                }
-            }
+            await actualizarMensaje(client, config.canales.estado, refEstado, construirEmbedEstado(info));
         } catch (e) {
-            console.error('[SRV] Error actualizando estado:', e.message);
+            console.error('[SRV] Error canal estado:', e.message);
         }
     }
 
-    // Actualizar #jugadores-online
+    // Jugadores online
     if (config.canales.jugadores) {
         try {
-            const canal = await client.channels.fetch(config.canales.jugadores);
-            const embed = construirEmbedJugadores(info);
-
-            if (mensajeJugadoresId) {
-                try {
-                    const msg = await canal.messages.fetch(mensajeJugadoresId);
-                    await msg.edit({ embeds: [embed] });
-                } catch {
-                    const msg = await canal.send({ embeds: [embed] });
-                    mensajeJugadoresId = msg.id;
-                }
-            } else {
-                const mensajes = await canal.messages.fetch({ limit: 5 });
-                const existente = mensajes.find(m => m.author.id === client.user.id);
-                if (existente) {
-                    await existente.edit({ embeds: [embed] });
-                    mensajeJugadoresId = existente.id;
-                } else {
-                    const msg = await canal.send({ embeds: [embed] });
-                    mensajeJugadoresId = msg.id;
-                }
-            }
+            await actualizarMensaje(client, config.canales.jugadores, refJugadores, construirEmbedJugadores(info));
         } catch (e) {
-            console.error('[SRV] Error actualizando jugadores:', e.message);
+            console.error('[SRV] Error canal jugadores:', e.message);
         }
     }
 
-    // Avisar en #anuncios si el servidor cae
-    if (!info.online && config.canales.anuncios) {
-        // Solo avisar una vez, no cada 2 minutos
-        if (!servidorCaidoAvisado) {
-            servidorCaidoAvisado = true;
-            try {
-                const canal = await client.channels.fetch(config.canales.anuncios);
-                await canal.send({
-                    embeds: [
-                        new EmbedBuilder()
-                            .setTitle('⚠️ Servidor caído')
-                            .setDescription('El servidor TSDE Arkeanos no responde. Estamos revisándolo.')
-                            .setColor(0xE74C3C)
-                    ]
-                });
-            } catch (e) {}
-        }
+    // Aviso caída
+    if (!info.online && !servidorCaidoAvisado && config.canales.anuncios) {
+        servidorCaidoAvisado = true;
+        try {
+            const canal = await client.channels.fetch(config.canales.anuncios);
+            await canal.send({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle('⚠️ Servidor caído')
+                        .setDescription('El servidor TSDE Arkeanos no responde. Estamos revisándolo.')
+                        .setColor(0xE74C3C)
+                ]
+            });
+        } catch {}
     } else if (info.online) {
         servidorCaidoAvisado = false;
     }
 }
 
-let servidorCaidoAvisado = false;
-
 // --- INICIAR ---
 
 async function iniciarMonitorServidor(client) {
     if (!config.rcon.ip || !config.rcon.password) {
-        console.warn('[SRV] RCON no configurado — monitor de servidor desactivado');
-        return;
-    }
-
-    if (!config.canales.estado && !config.canales.jugadores) {
-        console.warn('[SRV] Canales estado/jugadores no configurados en config.json');
+        console.warn('[SRV] RCON no configurado — monitor desactivado');
         return;
     }
 
@@ -214,11 +231,11 @@ async function iniciarMonitorServidor(client) {
     // Primera actualización inmediata
     await actualizarCanales(client);
 
-    // Actualizar cada 2 minutos
+    // Limpiar intervalo anterior
     if (intervalo) clearInterval(intervalo);
-    intervalo = setInterval(async () => {
-        await actualizarCanales(client);
-    }, 2 * 60 * 1000);
+
+    // Cada 2 minutos
+    intervalo = setInterval(() => actualizarCanales(client), 2 * 60 * 1000);
 }
 
 module.exports = { iniciarMonitorServidor };
