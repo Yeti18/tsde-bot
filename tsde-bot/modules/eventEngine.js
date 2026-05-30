@@ -86,7 +86,8 @@ function construirBotonesEvento(evento) {
         new ButtonBuilder()
             .setCustomId(`evt_cerrar_${evento.id}`)
             .setLabel('🔒 Cerrar inscripciones')
-            .setStyle(ButtonStyle.Primary),
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(evento.estado === 'cerrado'),
 
         new ButtonBuilder()
             .setCustomId(`evt_cancelar_evento_${evento.id}`)
@@ -94,7 +95,20 @@ function construirBotonesEvento(evento) {
             .setStyle(ButtonStyle.Danger)
     );
 
-    return [row1, row2];
+    const rows = [row1, row2];
+
+    // Botón taquillas solo cuando inscripciones cerradas
+    if (evento.estado === 'cerrado') {
+        const row3 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`evt_taquillas_${evento.id}`)
+                .setLabel('🔑 Asignar taquillas')
+                .setStyle(ButtonStyle.Success)
+        );
+        rows.push(row3);
+    }
+
+    return rows;
 }
 
 // --- CREAR EVENTO (desde comando) ---
@@ -257,13 +271,13 @@ async function handleButton(interaction, client) {
         const evento = db.eventos_activos[eventoId];
         if (!evento) return interaction.reply({ content: 'Evento no encontrado.', ephemeral: true });
 
+        await interaction.deferReply({ ephemeral: true });
+
         const nombre = interaction.user.username;
         const ahora = Date.now();
         const tresHorasEnMs = 3 * 60 * 60 * 1000;
 
-        // Comprobar si cancela con menos de 3 horas (si la fecha tiene timestamp)
         if (evento.timestamp && (evento.timestamp - ahora) < tresHorasEnMs) {
-            // Avisar al admin pero no bloquear — el admin decide si penalizar
             const config = require('../config.json');
             const canalLogs = await client.channels.fetch(config.canales.logs);
             canalLogs.send(`⚠️ **${nombre}** ha cancelado su inscripción en **${evento.titulo}** con menos de 3 horas de antelación. ¿Aplicar penalización?`);
@@ -271,19 +285,18 @@ async function handleButton(interaction, client) {
 
         if (evento.inscritos.includes(nombre)) {
             evento.inscritos = evento.inscritos.filter(u => u !== nombre);
-            // Pasar primero de lista de espera
             if (evento.lista_espera.length > 0) {
                 const siguiente = evento.lista_espera.shift();
                 evento.inscritos.push(siguiente);
                 const canal = await client.channels.fetch(evento.canal_id);
                 canal.send(`🎉 <@${siguiente}> ¡Se ha liberado una plaza en **${evento.titulo}**! Ya estás inscrito.`);
             }
-            await interaction.reply({ content: `✅ Has cancelado tu inscripción en **${evento.titulo}**.`, ephemeral: true });
+            await interaction.followUp({ content: `✅ Has cancelado tu inscripción en **${evento.titulo}**.`, ephemeral: true });
         } else if (evento.lista_espera.includes(nombre)) {
             evento.lista_espera = evento.lista_espera.filter(u => u !== nombre);
-            await interaction.reply({ content: `✅ Te hemos eliminado de la lista de espera.`, ephemeral: true });
+            await interaction.followUp({ content: `✅ Te hemos eliminado de la lista de espera.`, ephemeral: true });
         } else {
-            return interaction.reply({ content: '⚠️ No estás inscrito en este evento.', ephemeral: true });
+            return interaction.followUp({ content: '⚠️ No estás inscrito en este evento.', ephemeral: true });
         }
 
         guardarDB(db);
@@ -328,11 +341,27 @@ async function handleButton(interaction, client) {
         const evento = db.eventos_activos[eventoId];
         if (!evento) return interaction.reply({ content: 'Evento no encontrado.', ephemeral: true });
 
+        // Deferimos ANTES de cualquier operación lenta
+        await interaction.deferReply({ ephemeral: true });
+
         evento.estado = 'cerrado';
         guardarDB(db);
         await actualizarMensajeEvento(interaction, evento, client);
-        await rcon.broadcast(`Inscripciones cerradas para: ${evento.titulo}. Preparaos!`);
-        return interaction.reply({ content: `🔒 Inscripciones cerradas para **${evento.titulo}**.`, ephemeral: true });
+        await rcon.broadcast(`Inscripciones cerradas para: ${evento.titulo}.`);
+        return interaction.followUp({ content: `🔒 Inscripciones cerradas para **${evento.titulo}**.`, ephemeral: true });
+    }
+
+    // Asignar taquillas del Coliseo
+    if (id.startsWith('evt_taquillas_')) {
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', ephemeral: true });
+        const eventoId = id.replace('evt_taquillas_', '');
+        const db = cargarDB();
+        const evento = db.eventos_activos[eventoId];
+        if (!evento) return interaction.reply({ content: 'Evento no encontrado.', ephemeral: true });
+
+        const coliseo = require('./coliseoEngine.js');
+        await coliseo.asignarTaquillas(interaction, client, evento);
+        return;
     }
 
     // Cancelar evento completo (solo admin)
