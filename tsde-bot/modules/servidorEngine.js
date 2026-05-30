@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { Rcon } = require('rcon-client');
+const Rcon = require('rcon');
 const config = require('../config.json');
 
 let mensajeEstadoId = null;
@@ -18,22 +18,30 @@ const SERVIDOR = config.servidor || {
 // --- RCON ---
 
 async function ejecutarComandoRcon(comando) {
-    const rcon = new Rcon({
-        host: config.rcon.ip,
-        port: config.rcon.port,
-        password: config.rcon.password,
-        timeout: 8000
-    });
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error('Timeout RCON'));
+        }, 5000);
 
-    try {
-        await rcon.connect();
-        const respuesta = await rcon.send(comando);
-        await rcon.end();
-        return respuesta;
-    } catch (error) {
-        try { await rcon.end(); } catch {}
-        throw error;
-    }
+        const conn = new Rcon(config.rcon.ip, config.rcon.port, config.rcon.password);
+
+        conn.on('auth', () => {
+            conn.send(comando);
+        });
+
+        conn.on('response', (str) => {
+            clearTimeout(timer);
+            conn.disconnect();
+            resolve(str);
+        });
+
+        conn.on('error', (err) => {
+            clearTimeout(timer);
+            reject(err);
+        });
+
+        conn.connect();
+    });
 }
 
 async function consultarServidor() {
