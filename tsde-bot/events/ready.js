@@ -3,7 +3,7 @@ const { iniciarVotaciones } = require('../modules/votacionesEngine.js');
 const { iniciarMonitorServidor } = require('../modules/servidorEngine.js');
 
 module.exports = {
-    name: 'ready',
+    name: 'clientReady',
     once: true,
     async execute(client) {
         console.log(`✅ TSDE Bot conectado como ${client.user.tag}`);
