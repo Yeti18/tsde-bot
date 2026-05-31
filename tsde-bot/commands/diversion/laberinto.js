@@ -7,7 +7,18 @@ module.exports = {
         .setDescription('Gestionar el Laberinto TSDE')
         .addSubcommand(sub =>
             sub.setName('crear')
-                .setDescription('Crear evento del laberinto con inscripciones [ADMIN]')
+                .setDescription('Crear evento del laberinto [ADMIN]')
+                .addStringOption(opt =>
+                    opt.setName('modo')
+                        .setDescription('Modo de juego')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: '⏱️ Contrarreloj — el más rápido gana', value: 'speed' },
+                            { name: '⚔️ Supervivencia — último vivo gana', value: 'survival' },
+                            { name: '👥 Por equipos/tribus — tiempo combinado', value: 'teams' },
+                            { name: '🔄 Relevos — cada miembro hace una parte', value: 'relay' }
+                        )
+                )
         )
         .addSubcommand(sub =>
             sub.setName('podium')
@@ -21,7 +32,8 @@ module.exports = {
             if (!interaction.member.permissions.has('ManageMessages')) {
                 return interaction.reply({ content: '⛔ Solo administradores.', ephemeral: true });
             }
-            await laberintoEngine.mostrarModalCrearLaberinto(interaction);
+            const modo = interaction.options.getString('modo');
+            await laberintoEngine.mostrarModalCrearLaberinto(interaction, modo);
         }
 
         if (sub === 'podium') {
