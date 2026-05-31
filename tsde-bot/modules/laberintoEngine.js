@@ -6,17 +6,16 @@ const {
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
-    StringSelectMenuBuilder
+    StringSelectMenuBuilder,
+    MessageFlags
 } = require('discord.js');
 const fs = require('fs');
 const rcon = require('./rconHelper.js');
 
 const DB_PATH = './database.json';
 
-// Cronómetros activos en memoria: { jugador: timestamp_inicio }
+// Cronómetros activos en memoria
 const cronometros = {};
-
-// ID del mensaje del panel activo
 let panelMensajeId = null;
 let panelCanalId = null;
 let intervaloActualizacion = null;
@@ -33,7 +32,7 @@ function guardarDB(data) {
 
 function cargarLaberinto() {
     const db = cargarDB();
-    if (!db.laberinto) db.laberinto = { evento_activo: null, resultados: [] };
+    if (!db.laberinto) db.laberinto = { evento_activo: null, resultados: [], equipos: [] };
     return db.laberinto;
 }
 
@@ -58,7 +57,6 @@ function formatearTiempo(ms) {
 
 function ordenarResultados(resultados) {
     return [...resultados].sort((a, b) => {
-        // Completados primero, ordenados por tiempo ascendente
         if (a.completado && !b.completado) return -1;
         if (!a.completado && b.completado) return 1;
         if (a.completado && b.completado) return a.tiempo_ms - b.tiempo_ms;
@@ -66,211 +64,347 @@ function ordenarResultados(resultados) {
     });
 }
 
-// --- EMBEDS ---
+// --- EMBEDS INSCRIPCIONES ---
 
 function construirEmbedInscripciones(evento) {
     const inscritos = evento.inscritos || [];
+    const equipos = evento.equipos || [];
     const minimo = evento.minimo || 5;
-    const listos = inscritos.length >= minimo;
+    const modoTexto = {
+        speed: '⏱️ Contrarreloj',
+        survival: '⚔️ Supervivencia',
+        teams: '👥 Por equipos (tribus)',
+        relay: '🔄 Relevos'
+    }[evento.modo] || evento.modo;
 
     const embed = new EmbedBuilder()
-        .setTitle('🌀 LABERINTO TSDE — Inscripciones')
+        .setTitle(`🌀 LABERINTO TSDE — ${modoTexto}`)
         .setColor(0x9B59B6)
         .addFields(
             { name: '🎁 Recompensa', value: evento.recompensa, inline: true },
-            { name: '👥 Mínimo jugadores', value: `${inscritos.length}/${minimo}`, inline: true }
+            { name: '👥 Mínimo', value: `${evento.modo === 'teams' ? equipos.length + ' equipos' : inscritos.length + '/' + minimo}`, inline: true }
         );
 
-    if (inscritos.length > 0) {
-        embed.addFields({
-            name: '✅ Inscritos',
-            value: inscritos.map((j, i) => `${i + 1}. ${j}`).join('\n'),
-            inline: false
-        });
-    } else {
-        embed.addFields({ name: '✅ Inscritos', value: 'Nadie inscrito aún', inline: false });
-    }
-
-    embed.setFooter({
-        text: listos
-            ? `✅ Mínimo alcanzado — El admin puede iniciar el evento`
-            : `Faltan ${minimo - inscritos.length} jugadores para poder iniciar`
-    });
-
-    return embed;
-}
-
-function construirEmbedCronometros() {
-    const lab = cargarLaberinto();
-    const resultados = ordenarResultados(lab.resultados || []);
-    const recompensa = lab.evento_activo?.recompensa || '—';
-
-    const embed = new EmbedBuilder()
-        .setTitle('⏱️ LABERINTO EN CURSO — Panel de control')
-        .setColor(0xF39C12)
-        .addFields({ name: '🎁 Recompensa', value: recompensa, inline: false });
-
-    // Cronómetros activos
-    if (Object.keys(cronometros).length > 0) {
-        const lineas = Object.entries(cronometros).map(([jugador, inicio]) => {
-            const transcurrido = Date.now() - inicio;
-            return `🏃 **${jugador}** — \`${formatearTiempo(transcurrido)}\``;
-        });
-        embed.addFields({ name: '⏱️ En curso', value: lineas.join('\n'), inline: false });
-    }
-
-    // Resultados guardados (ordenados correctamente)
-    const completados = resultados.filter(r => r.completado);
-    if (completados.length > 0) {
-        const medallas = ['🥇', '🥈', '🥉'];
-        const lineas = completados.map((r, i) => {
-            const medal = i < 3 ? medallas[i] : `\`${i + 1}.\``;
-            return `${medal} **${r.jugador}** — \`${formatearTiempo(r.tiempo_ms)}\``;
-        });
-        embed.addFields({ name: '🏆 Resultados', value: lineas.join('\n'), inline: false });
-    }
-
-    const noCompletados = resultados.filter(r => !r.completado);
-    if (noCompletados.length > 0) {
-        embed.addFields({
-            name: 'No completado',
-            value: noCompletados.map(r => `❌ ${r.jugador}`).join('\n'),
-            inline: false
-        });
-    }
-
-    if (Object.keys(cronometros).length === 0 && resultados.length === 0) {
-        embed.addFields({ name: 'Estado', value: 'Usa **➕ Añadir jugador** para cronometrar.', inline: false });
-    }
-
-    embed.setFooter({ text: 'Actualización en tiempo real cada 5 segundos' });
-    return embed;
-}
-
-function construirEmbedPodiumFinal() {
-    const lab = cargarLaberinto();
-    const resultados = ordenarResultados(lab.resultados || []);
-    const recompensa = lab.evento_activo?.recompensa || '—';
-
-    const embed = new EmbedBuilder()
-        .setTitle('🏆 RESULTADOS FINALES — Laberinto TSDE')
-        .setColor(0xF1C40F)
-        .addFields({ name: '🎁 Recompensa para todos', value: recompensa, inline: false });
-
-    if (resultados.length === 0) {
-        embed.setDescription('Sin resultados registrados.');
-        return embed;
-    }
-
-    const medallas = ['🥇', '🥈', '🥉'];
-    const lineas = resultados.map((r, i) => {
-        if (r.completado) {
-            const medal = i < 3 ? medallas[i] : `\`${i + 1}.\``;
-            return `${medal} **${r.jugador}** — \`${formatearTiempo(r.tiempo_ms)}\``;
+    if (evento.modo === 'teams') {
+        if (equipos.length > 0) {
+            const listaEquipos = equipos.map((eq, i) =>
+                `**${i + 1}. ${eq.nombre}** (${eq.jugadores.length}/6)\n${eq.jugadores.map(j => `  └ ${j}`).join('\n')}`
+            ).join('\n\n');
+            embed.addFields({ name: '🛡️ Equipos inscritos', value: listaEquipos, inline: false });
+        } else {
+            embed.addFields({ name: '🛡️ Equipos inscritos', value: 'Ningún equipo inscrito aún', inline: false });
         }
-        return `❌ **${r.jugador}** — No completado`;
-    });
+    } else {
+        if (inscritos.length > 0) {
+            embed.addFields({
+                name: '✅ Inscritos',
+                value: inscritos.map((j, i) => `${i + 1}. ${j}`).join('\n'),
+                inline: false
+            });
+        } else {
+            embed.addFields({ name: '✅ Inscritos', value: 'Nadie inscrito aún', inline: false });
+        }
+    }
 
-    embed.setDescription(lineas.join('\n'));
-    embed.setFooter({ text: `${resultados.length} participantes` });
+    const listos = evento.modo === 'teams' ? equipos.length >= 2 : inscritos.length >= minimo;
+    embed.setFooter({ text: listos ? '✅ Listo para iniciar' : `Faltan ${evento.modo === 'teams' ? '2 equipos mínimo' : minimo - inscritos.length + ' jugadores'}` });
+
     return embed;
 }
 
-// --- BOTONES DINÁMICOS ---
+function construirBotonesInscripciones(evento) {
+    const esTeams = evento.modo === 'teams';
 
-function construirBotonesInscripciones() {
-    const lab = cargarLaberinto();
-    const inscritos = lab.evento_activo?.inscritos || [];
-    const minimo = lab.evento_activo?.minimo || 5;
-    const listos = inscritos.length >= minimo;
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('lab_apuntar')
+            .setLabel(esTeams ? '🛡️ Inscribir equipo' : '✋ Apuntarme')
+            .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setCustomId('lab_desapuntar')
+            .setLabel(esTeams ? '❌ Retirar equipo' : '❌ Borrarme')
+            .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+            .setCustomId('lab_iniciar')
+            .setLabel('▶️ Iniciar evento')
+            .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+            .setCustomId('lab_cancelar_evento')
+            .setLabel('🗑️ Cancelar')
+            .setStyle(ButtonStyle.Secondary)
+    );
 
-    return [
-        new ActionRowBuilder().addComponents(
+    // Botón añadir jugador a equipo (solo modo teams)
+    if (esTeams) {
+        const row2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId('lab_apuntar')
-                .setLabel('✋ Apuntarme')
-                .setStyle(ButtonStyle.Success),
-            new ButtonBuilder()
-                .setCustomId('lab_desapuntar')
-                .setLabel('❌ Borrarme')
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('lab_iniciar')
-                .setLabel('▶️ Iniciar evento')
-                .setStyle(ButtonStyle.Danger)
-                .setDisabled(!listos),
-            new ButtonBuilder()
-                .setCustomId('lab_cancelar_evento')
-                .setLabel('🗑️ Cancelar')
-                .setStyle(ButtonStyle.Secondary)
-        )
-    ];
+                .setCustomId('lab_add_miembro_equipo')
+                .setLabel('➕ Añadir jugador a equipo')
+                .setStyle(ButtonStyle.Primary)
+        );
+        return [row, row2];
+    }
+
+    return [row];
 }
 
-function construirBotonesCronometros(client) {
+// --- EMBED CRONÓMETROS ---
+
+function construirEmbedCronometros(evento) {
+    const lab = cargarLaberinto();
+    const resultados = ordenarResultados(lab.resultados || []);
+    const modoTexto = {
+        speed: '⏱️ Contrarreloj',
+        survival: '⚔️ Supervivencia',
+        teams: '👥 Por equipos',
+        relay: '🔄 Relevos'
+    }[evento.modo] || evento.modo;
+
+    const embed = new EmbedBuilder()
+        .setTitle(`${modoTexto} — Panel de control`)
+        .setColor(0xF39C12)
+        .addFields({ name: '🎁 Recompensa', value: evento.recompensa, inline: false });
+
+    if (evento.modo === 'survival') {
+        // Modo supervivencia — mostrar participantes vivos
+        const vivos = (evento.inscritos || []).filter(j =>
+            !lab.resultados.some(r => r.jugador === j)
+        );
+        if (vivos.length > 0) {
+            embed.addFields({ name: '💀 Aún en pie', value: vivos.map(j => `⚔️ ${j}`).join('\n'), inline: false });
+        }
+        if (resultados.length > 0) {
+            embed.addFields({
+                name: '💀 Eliminados',
+                value: resultados.map((r, i) => `${i + 1}. ~~${r.jugador}~~`).join('\n'),
+                inline: false
+            });
+        }
+    } else if (evento.modo === 'teams') {
+        // Modo equipos
+        const equipos = evento.equipos || [];
+        for (const equipo of equipos) {
+            const lineas = equipo.jugadores.map(j => {
+                if (cronometros[j]) {
+                    const t = Date.now() - cronometros[j];
+                    return `🏃 ${j} — \`${formatearTiempo(t)}\``;
+                }
+                const resultado = lab.resultados.find(r => r.jugador === j);
+                if (resultado) return resultado.completado
+                    ? `✅ ${j} — \`${formatearTiempo(resultado.tiempo_ms)}\``
+                    : `❌ ${j} — No completado`;
+                return `⏳ ${j} — Esperando`;
+            });
+
+            // Tiempo del equipo si todos terminaron
+            const tiemposEquipo = equipo.jugadores
+                .map(j => lab.resultados.find(r => r.jugador === j))
+                .filter(r => r && r.completado);
+
+            const tiempoTotal = tiemposEquipo.length === equipo.jugadores.length
+                ? `⏱️ Total: \`${formatearTiempo(tiemposEquipo.reduce((s, r) => s + r.tiempo_ms, 0))}\``
+                : `${tiemposEquipo.length}/${equipo.jugadores.length} completados`;
+
+            embed.addFields({
+                name: `🛡️ ${equipo.nombre} — ${tiempoTotal}`,
+                value: lineas.join('\n'),
+                inline: false
+            });
+        }
+    } else {
+        // Modo contrarreloj / relevos
+        if (Object.keys(cronometros).length > 0) {
+            const lineas = Object.entries(cronometros).map(([j, inicio]) =>
+                `🏃 **${j}** — \`${formatearTiempo(Date.now() - inicio)}\``
+            );
+            embed.addFields({ name: '⏱️ En curso', value: lineas.join('\n'), inline: false });
+        }
+
+        const completados = resultados.filter(r => r.completado);
+        if (completados.length > 0) {
+            const medallas = ['🥇', '🥈', '🥉'];
+            embed.addFields({
+                name: '🏆 Resultados',
+                value: completados.map((r, i) =>
+                    `${i < 3 ? medallas[i] : `\`${i + 1}.\``} **${r.jugador}** — \`${formatearTiempo(r.tiempo_ms)}\``
+                ).join('\n'),
+                inline: false
+            });
+        }
+
+        const noCompletados = resultados.filter(r => !r.completado);
+        if (noCompletados.length > 0) {
+            embed.addFields({
+                name: 'No completado',
+                value: noCompletados.map(r => `❌ ${r.jugador}`).join('\n'),
+                inline: false
+            });
+        }
+    }
+
+    embed.setFooter({ text: 'Actualización cada 5 segundos' });
+    return embed;
+}
+
+function construirBotonesCronometros(evento, client) {
     const jugadores = Object.keys(cronometros);
     const rows = [];
 
-    // Fila 0 — botones generales
-    rows.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('lab_add_jugador')
-            .setLabel('➕ Añadir jugador')
-            .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-            .setCustomId('lab_finalizar')
-            .setLabel('🏁 Finalizar evento')
-            .setStyle(ButtonStyle.Primary)
-    ));
+    if (evento.modo === 'survival') {
+        // Supervivencia — selector de eliminados
+        const lab = cargarLaberinto();
+        const vivos = (evento.inscritos || []).filter(j =>
+            !lab.resultados.some(r => r.jugador === j)
+        );
 
-    // Filas 1-3 — botón STOP por jugador (máx 15)
-    const chunks = [];
-    for (let i = 0; i < Math.min(jugadores.length, 15); i += 5) {
-        chunks.push(jugadores.slice(i, i + 5));
-    }
-    chunks.forEach(grupo => {
-        const row = new ActionRowBuilder();
-        grupo.forEach((jugador, idx) => {
-            row.addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`lab_stop_${Buffer.from(jugador).toString('base64')}`)
-                    .setLabel(`⏹ ${jugador.length > 18 ? jugador.substring(0, 18) + '…' : jugador}`)
-                    .setStyle(ButtonStyle.Danger)
-            );
-        });
-        rows.push(row);
-    });
-
-    // Fila 4 — desplegable ANULAR
-    if (jugadores.length > 0) {
         rows.push(new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder()
-                .setCustomId('lab_anular_select')
-                .setPlaceholder('❌ Anular jugador (no completó)...')
-                .addOptions(jugadores.slice(0, 25).map(j => ({
-                    label: j,
-                    value: j,
-                    emoji: '❌'
-                })))
+            new ButtonBuilder()
+                .setCustomId('lab_finalizar')
+                .setLabel('🏁 Finalizar evento')
+                .setStyle(ButtonStyle.Primary)
         ));
+
+        if (vivos.length > 0) {
+            rows.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('lab_eliminar_select')
+                    .setPlaceholder('💀 Eliminar jugador...')
+                    .addOptions(vivos.slice(0, 25).map(j => ({
+                        label: j, value: j, emoji: '💀'
+                    })))
+            ));
+        }
+    } else {
+        // Contrarreloj / teams / relevos
+        rows.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('lab_add_jugador')
+                .setLabel('➕ Añadir jugador')
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId('lab_finalizar')
+                .setLabel('🏁 Finalizar evento')
+                .setStyle(ButtonStyle.Primary)
+        ));
+
+        // Botones STOP individuales (máx 15)
+        const chunks = [];
+        for (let i = 0; i < Math.min(jugadores.length, 15); i += 5) {
+            chunks.push(jugadores.slice(i, i + 5));
+        }
+        chunks.forEach(grupo => {
+            const row = new ActionRowBuilder();
+            grupo.forEach(jugador => {
+                row.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`lab_stop_${Buffer.from(jugador).toString('base64')}`)
+                        .setLabel(`⏹ ${jugador.length > 18 ? jugador.substring(0, 18) + '…' : jugador}`)
+                        .setStyle(ButtonStyle.Danger)
+                );
+            });
+            rows.push(row);
+        });
+
+        if (jugadores.length > 0) {
+            rows.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('lab_anular_select')
+                    .setPlaceholder('❌ Anular jugador (no completó)...')
+                    .addOptions(jugadores.slice(0, 25).map(j => ({
+                        label: j, value: j, emoji: '❌'
+                    })))
+            ));
+        }
     }
 
     return rows.slice(0, 5);
 }
 
+// --- EMBED PODIUM FINAL ---
+
+function construirEmbedPodiumFinal(evento) {
+    const lab = cargarLaberinto();
+    const recompensa = evento.recompensa || '—';
+
+    const embed = new EmbedBuilder()
+        .setTitle('🏆 RESULTADOS FINALES — Laberinto TSDE')
+        .setColor(0xF1C40F)
+        .addFields({ name: '🎁 Recompensa', value: recompensa, inline: false });
+
+    if (evento.modo === 'teams') {
+        const equipos = evento.equipos || [];
+        const rankingEquipos = equipos.map(eq => {
+            const tiempos = eq.jugadores
+                .map(j => lab.resultados.find(r => r.jugador === j))
+                .filter(r => r && r.completado);
+            const total = tiempos.length === eq.jugadores.length
+                ? tiempos.reduce((s, r) => s + r.tiempo_ms, 0)
+                : null;
+            return { nombre: eq.nombre, tiempo: total, completados: tiempos.length, total: eq.jugadores.length };
+        }).sort((a, b) => {
+            if (a.tiempo && !b.tiempo) return -1;
+            if (!a.tiempo && b.tiempo) return 1;
+            if (a.tiempo && b.tiempo) return a.tiempo - b.tiempo;
+            return b.completados - a.completados;
+        });
+
+        const medallas = ['🥇', '🥈', '🥉'];
+        const lineas = rankingEquipos.map((eq, i) => {
+            const medal = i < 3 ? medallas[i] : `\`${i + 1}.\``;
+            const tiempo = eq.tiempo ? `\`${formatearTiempo(eq.tiempo)}\`` : `${eq.completados}/${eq.total} completados`;
+            return `${medal} **${eq.nombre}** — ${tiempo}`;
+        });
+        embed.setDescription(lineas.join('\n'));
+    } else if (evento.modo === 'survival') {
+        const eliminados = lab.resultados;
+        if (eliminados.length > 0) {
+            const ganador = (evento.inscritos || []).find(j =>
+                !eliminados.some(r => r.jugador === j)
+            ) || 'Sin ganador';
+            embed.addFields({ name: '👑 Ganador', value: ganador, inline: false });
+            embed.addFields({
+                name: '💀 Eliminados (por orden)',
+                value: eliminados.map((r, i) => `${i + 1}. ${r.jugador}`).join('\n'),
+                inline: false
+            });
+        }
+    } else {
+        const resultados = ordenarResultados(lab.resultados || []);
+        if (resultados.length === 0) {
+            embed.setDescription('Sin resultados registrados.');
+            return embed;
+        }
+        const medallas = ['🥇', '🥈', '🥉'];
+        const lineas = resultados.map((r, i) => {
+            if (r.completado) {
+                const medal = i < 3 ? medallas[i] : `\`${i + 1}.\``;
+                return `${medal} **${r.jugador}** — \`${formatearTiempo(r.tiempo_ms)}\``;
+            }
+            return `❌ **${r.jugador}** — No completado`;
+        });
+        embed.setDescription(lineas.join('\n'));
+    }
+
+    embed.setFooter({ text: `${(lab.resultados || []).length} participantes` });
+    return embed;
+}
+
 // --- ACTUALIZACIÓN AUTOMÁTICA ---
 
-async function iniciarActualizacion(client) {
+async function iniciarActualizacion(client, canalId, mensajeId, evento) {
     if (intervaloActualizacion) clearInterval(intervaloActualizacion);
+    panelCanalId = canalId;
+    panelMensajeId = mensajeId;
 
     intervaloActualizacion = setInterval(async () => {
-        if (!panelMensajeId || !panelCanalId || Object.keys(cronometros).length === 0) return;
+        if (!panelMensajeId || !panelCanalId) return;
+        if (Object.keys(cronometros).length === 0) return;
         try {
             const canal = await client.channels.fetch(panelCanalId);
             const mensaje = await canal.messages.fetch(panelMensajeId);
             await mensaje.edit({
-                embeds: [construirEmbedCronometros()],
-                components: construirBotonesCronometros(client)
+                embeds: [construirEmbedCronometros(evento)],
+                components: construirBotonesCronometros(evento, client)
             });
         } catch (e) {
             clearInterval(intervaloActualizacion);
@@ -283,14 +417,16 @@ function detenerActualizacion() {
         clearInterval(intervaloActualizacion);
         intervaloActualizacion = null;
     }
+    panelMensajeId = null;
+    panelCanalId = null;
 }
 
-// --- MODAL CREAR EVENTO ---
+// --- MODAL CREAR LABERINTO ---
 
-async function mostrarModalCrearLaberinto(interaction) {
+async function mostrarModalCrearLaberinto(interaction, modo) {
     const modal = new ModalBuilder()
-        .setCustomId('lab_modal_crear')
-        .setTitle('Crear evento Laberinto TSDE');
+        .setCustomId(`lab_modal_crear_${modo}`)
+        .setTitle(`Crear Laberinto — ${modo === 'speed' ? 'Contrarreloj' : modo === 'survival' ? 'Supervivencia' : modo === 'teams' ? 'Por equipos' : 'Relevos'}`);
 
     modal.addComponents(
         new ActionRowBuilder().addComponents(
@@ -304,9 +440,9 @@ async function mostrarModalCrearLaberinto(interaction) {
         new ActionRowBuilder().addComponents(
             new TextInputBuilder()
                 .setCustomId('minimo')
-                .setLabel('Mínimo de jugadores para iniciar')
-                .setPlaceholder('5')
-                .setValue('5')
+                .setLabel(modo === 'teams' ? 'Mínimo de equipos para iniciar' : 'Mínimo de jugadores para iniciar')
+                .setPlaceholder(modo === 'teams' ? '2' : '5')
+                .setValue(modo === 'teams' ? '2' : '5')
                 .setStyle(TextInputStyle.Short)
                 .setRequired(true)
         )
@@ -318,59 +454,124 @@ async function mostrarModalCrearLaberinto(interaction) {
 // --- GESTIÓN DE MODALES ---
 
 async function handleModal(interaction, client) {
-    if (interaction.customId === 'lab_modal_crear') {
-        try {
-            const recompensa = interaction.fields.getTextInputValue('recompensa');
-            const minimo = parseInt(interaction.fields.getTextInputValue('minimo')) || 5;
+    const id = interaction.customId;
 
+    // Modal crear laberinto
+    if (id.startsWith('lab_modal_crear_')) {
+        try {
+            const modo = id.replace('lab_modal_crear_', '');
+            const recompensa = interaction.fields.getTextInputValue('recompensa');
+            const minimo = parseInt(interaction.fields.getTextInputValue('minimo')) || (modo === 'teams' ? 2 : 5);
+
+            const config = require('../config.json');
             const lab = cargarLaberinto();
             lab.evento_activo = {
                 recompensa,
                 minimo,
+                modo,
                 inscritos: [],
+                equipos: [],
                 estado: 'inscripciones'
             };
             lab.resultados = [];
             guardarLaberinto(lab);
 
             Object.keys(cronometros).forEach(k => delete cronometros[k]);
+            detenerActualizacion();
 
-            const config = require('../config.json');
             const canal = await client.channels.fetch(config.canales.eventos).catch(() => null);
-            if (!canal) return interaction.reply({ content: '❌ Canal de eventos no configurado.', ephemeral: true });
+            if (!canal) return interaction.reply({ content: '❌ Canal de eventos no configurado.', flags: MessageFlags.Ephemeral });
 
             const embed = construirEmbedInscripciones(lab.evento_activo);
-            const botones = construirBotonesInscripciones();
+            const botones = construirBotonesInscripciones(lab.evento_activo);
             const mensaje = await canal.send({ embeds: [embed], components: botones });
 
             panelCanalId = config.canales.eventos;
             panelMensajeId = mensaje.id;
 
-            await interaction.reply({ content: `✅ Laberinto creado en <#${config.canales.eventos}>`, ephemeral: true });
+            await interaction.reply({ content: `✅ Laberinto creado en <#${config.canales.eventos}>`, flags: MessageFlags.Ephemeral });
 
         } catch (error) {
             console.error('[LAB] Error creando laberinto:', error);
-            await interaction.reply({ content: `❌ Error: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Error: ${error.message}`, flags: MessageFlags.Ephemeral });
         }
     }
 
-    if (interaction.customId === 'lab_modal_add_jugador') {
+    // Modal añadir jugador al cronómetro
+    if (id === 'lab_modal_add_jugador') {
         try {
             const jugador = interaction.fields.getTextInputValue('nombre').trim();
 
             if (cronometros[jugador] !== undefined) {
-                return interaction.reply({ content: `⚠️ **${jugador}** ya tiene cronómetro activo.`, ephemeral: true });
+                return interaction.reply({ content: `⚠️ **${jugador}** ya tiene cronómetro activo.`, flags: MessageFlags.Ephemeral });
             }
 
             cronometros[jugador] = Date.now();
 
-            const embed = construirEmbedCronometros();
-            const botones = construirBotonesCronometros(client);
+            const lab = cargarLaberinto();
+            const embed = construirEmbedCronometros(lab.evento_activo);
+            const botones = construirBotonesCronometros(lab.evento_activo, client);
             await interaction.update({ embeds: [embed], components: botones });
 
         } catch (error) {
             console.error('[LAB] Error añadiendo jugador:', error);
-            await interaction.reply({ content: `❌ Error: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Error: ${error.message}`, flags: MessageFlags.Ephemeral });
+        }
+    }
+
+    // Modal inscribir equipo
+    if (id === 'lab_modal_inscribir_equipo') {
+        try {
+            const nombreEquipo = interaction.fields.getTextInputValue('nombre_equipo').trim();
+            const miembros = interaction.fields.getTextInputValue('miembros')
+                .split('\n')
+                .map(m => m.trim())
+                .filter(m => m.length > 0)
+                .slice(0, 6);
+
+            const lab = cargarLaberinto();
+            const evento = lab.evento_activo;
+
+            if (!evento) return interaction.reply({ content: 'No hay evento activo.', flags: MessageFlags.Ephemeral });
+            if (evento.equipos.some(e => e.nombre === nombreEquipo)) {
+                return interaction.reply({ content: `⚠️ Ya existe un equipo llamado **${nombreEquipo}**.`, flags: MessageFlags.Ephemeral });
+            }
+
+            evento.equipos.push({ nombre: nombreEquipo, jugadores: miembros });
+            guardarLaberinto(lab);
+
+            const embed = construirEmbedInscripciones(evento);
+            const botones = construirBotonesInscripciones(evento);
+            await interaction.update({ embeds: [embed], components: botones });
+
+        } catch (error) {
+            await interaction.reply({ content: `❌ Error: ${error.message}`, flags: MessageFlags.Ephemeral });
+        }
+    }
+
+    // Modal añadir miembro a equipo
+    if (id.startsWith('lab_modal_add_miembro_')) {
+        try {
+            const nombreEquipo = id.replace('lab_modal_add_miembro_', '');
+            const jugador = interaction.fields.getTextInputValue('jugador').trim();
+
+            const lab = cargarLaberinto();
+            const evento = lab.evento_activo;
+            const equipo = evento.equipos.find(e => e.nombre === nombreEquipo);
+
+            if (!equipo) return interaction.reply({ content: 'Equipo no encontrado.', flags: MessageFlags.Ephemeral });
+            if (equipo.jugadores.length >= 6) return interaction.reply({ content: '⚠️ El equipo ya tiene 6 jugadores (máximo).', flags: MessageFlags.Ephemeral });
+            if (equipo.jugadores.includes(jugador)) return interaction.reply({ content: '⚠️ Ese jugador ya está en el equipo.', flags: MessageFlags.Ephemeral });
+
+            equipo.jugadores.push(jugador);
+            guardarLaberinto(lab);
+
+            const embed = construirEmbedInscripciones(evento);
+            const botones = construirBotonesInscripciones(evento);
+            await interaction.update({ embeds: [embed], components: botones });
+
+        } catch (error) {
+            await interaction.reply({ content: `❌ Error: ${error.message}`, flags: MessageFlags.Ephemeral });
         }
     }
 }
@@ -380,21 +581,48 @@ async function handleModal(interaction, client) {
 async function handleButton(interaction, client) {
     const id = interaction.customId;
 
-    // Apuntarse al laberinto
+    // Apuntarse
     if (id === 'lab_apuntar') {
         const lab = cargarLaberinto();
-        if (!lab.evento_activo) return interaction.reply({ content: 'No hay evento activo.', ephemeral: true });
+        if (!lab.evento_activo) return interaction.reply({ content: 'No hay evento activo.', flags: MessageFlags.Ephemeral });
 
-        const nombre = interaction.user.displayName;
-        if (lab.evento_activo.inscritos.includes(nombre)) {
-            return interaction.reply({ content: '⚠️ Ya estás inscrito.', ephemeral: true });
+        const evento = lab.evento_activo;
+
+        if (evento.modo === 'teams') {
+            // Modo equipos — abrir modal para inscribir equipo
+            if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins pueden inscribir equipos.', flags: MessageFlags.Ephemeral });
+            const modal = new ModalBuilder()
+                .setCustomId('lab_modal_inscribir_equipo')
+                .setTitle('Inscribir equipo');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('nombre_equipo')
+                        .setLabel('Nombre del equipo/tribu')
+                        .setPlaceholder('Ej: Los Depredadores')
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('miembros')
+                        .setLabel('Jugadores (uno por línea, máx 6)')
+                        .setPlaceholder('Yeti124\nSangui\nJugador3')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                )
+            );
+            return interaction.showModal(modal);
         }
 
-        lab.evento_activo.inscritos.push(nombre);
+        const nombre = interaction.user.displayName;
+        if (evento.inscritos.includes(nombre)) return interaction.reply({ content: '⚠️ Ya estás inscrito.', flags: MessageFlags.Ephemeral });
+
+        evento.inscritos.push(nombre);
         guardarLaberinto(lab);
 
-        const embed = construirEmbedInscripciones(lab.evento_activo);
-        const botones = construirBotonesInscripciones();
+        const embed = construirEmbedInscripciones(evento);
+        const botones = construirBotonesInscripciones(evento);
         await interaction.update({ embeds: [embed], components: botones });
         return;
     }
@@ -402,56 +630,97 @@ async function handleButton(interaction, client) {
     // Borrar inscripción
     if (id === 'lab_desapuntar') {
         const lab = cargarLaberinto();
-        if (!lab.evento_activo) return interaction.reply({ content: 'No hay evento activo.', ephemeral: true });
+        if (!lab.evento_activo) return interaction.reply({ content: 'No hay evento activo.', flags: MessageFlags.Ephemeral });
 
-        const nombre = interaction.user.displayName;
-        if (!lab.evento_activo.inscritos.includes(nombre)) {
-            return interaction.reply({ content: '⚠️ No estás inscrito.', ephemeral: true });
+        const evento = lab.evento_activo;
+
+        if (evento.modo === 'teams') {
+            if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
+            return interaction.reply({ content: 'Para retirar un equipo usa el select menu o contacta con un admin.', flags: MessageFlags.Ephemeral });
         }
 
-        lab.evento_activo.inscritos = lab.evento_activo.inscritos.filter(j => j !== nombre);
+        const nombre = interaction.user.displayName;
+        if (!evento.inscritos.includes(nombre)) return interaction.reply({ content: '⚠️ No estás inscrito.', flags: MessageFlags.Ephemeral });
+
+        evento.inscritos = evento.inscritos.filter(j => j !== nombre);
         guardarLaberinto(lab);
 
-        const embed = construirEmbedInscripciones(lab.evento_activo);
-        const botones = construirBotonesInscripciones();
+        const embed = construirEmbedInscripciones(evento);
+        const botones = construirBotonesInscripciones(evento);
         await interaction.update({ embeds: [embed], components: botones });
         return;
     }
 
-    // Iniciar evento (admin)
+    // Añadir miembro a equipo
+    if (id === 'lab_add_miembro_equipo') {
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
+        const lab = cargarLaberinto();
+        const equipos = lab.evento_activo?.equipos || [];
+        if (equipos.length === 0) return interaction.reply({ content: '❌ No hay equipos inscritos aún.', flags: MessageFlags.Ephemeral });
+
+        // Si hay un solo equipo, ir directo
+        if (equipos.length === 1) {
+            const modal = new ModalBuilder()
+                .setCustomId(`lab_modal_add_miembro_${equipos[0].nombre}`)
+                .setTitle(`Añadir jugador a ${equipos[0].nombre}`);
+            modal.addComponents(new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('jugador')
+                    .setLabel('Nombre del jugador en ARK')
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true)
+            ));
+            return interaction.showModal(modal);
+        }
+
+        // Si hay varios equipos, mostrar selector
+        await interaction.reply({
+            embeds: [new EmbedBuilder().setDescription('Selecciona el equipo al que añadir el jugador:').setColor(0x9B59B6)],
+            components: [new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('lab_select_equipo_add')
+                    .setPlaceholder('Selecciona equipo...')
+                    .addOptions(equipos.map(e => ({ label: e.nombre, value: e.nombre })))
+            )],
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Iniciar evento
     if (id === 'lab_iniciar') {
-        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', ephemeral: true });
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
 
         const lab = cargarLaberinto();
-        if (!lab.evento_activo) return interaction.reply({ content: 'No hay evento activo.', ephemeral: true });
+        if (!lab.evento_activo) return interaction.reply({ content: 'No hay evento activo.', flags: MessageFlags.Ephemeral });
 
-        const inscritos = lab.evento_activo.inscritos || [];
-        if (inscritos.length < lab.evento_activo.minimo) {
+        const evento = lab.evento_activo;
+        const minimo = evento.minimo || (evento.modo === 'teams' ? 2 : 5);
+
+        const count = evento.modo === 'teams' ? evento.equipos.length : evento.inscritos.length;
+        if (count < minimo) {
             return interaction.reply({
-                content: `❌ Mínimo ${lab.evento_activo.minimo} jugadores. Hay ${inscritos.length}.`,
-                ephemeral: true
+                content: `❌ Mínimo ${minimo} ${evento.modo === 'teams' ? 'equipos' : 'jugadores'}. Hay ${count}.`,
+                flags: MessageFlags.Ephemeral
             });
         }
 
-        lab.evento_activo.estado = 'en_curso';
+        evento.estado = 'en_curso';
         guardarLaberinto(lab);
         Object.keys(cronometros).forEach(k => delete cronometros[k]);
 
-        panelCanalId = interaction.channelId;
-        panelMensajeId = interaction.message.id;
-
-        const embed = construirEmbedCronometros();
-        const botones = construirBotonesCronometros(client);
+        const embed = construirEmbedCronometros(evento);
+        const botones = construirBotonesCronometros(evento, client);
         await interaction.update({ embeds: [embed], components: botones });
 
-        iniciarActualizacion(client);
-        await rcon.broadcast(`¡LABERINTO TSDE ha comenzado! Dirigíos a la entrada.`);
+        await iniciarActualizacion(client, interaction.channelId, interaction.message.id, evento);
+        await rcon.broadcast(`¡LABERINTO TSDE ha comenzado! Modo: ${evento.modo === 'teams' ? 'Por equipos' : evento.modo === 'survival' ? 'Supervivencia' : 'Contrarreloj'}`);
         return;
     }
 
-    // Cancelar evento (admin)
+    // Cancelar evento
     if (id === 'lab_cancelar_evento') {
-        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', ephemeral: true });
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
 
         const lab = cargarLaberinto();
         lab.evento_activo = null;
@@ -467,45 +736,40 @@ async function handleButton(interaction, client) {
         return;
     }
 
-    // Añadir jugador (admin)
+    // Añadir jugador al cronómetro
     if (id === 'lab_add_jugador') {
-        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', ephemeral: true });
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
 
         const modal = new ModalBuilder()
             .setCustomId('lab_modal_add_jugador')
             .setTitle('Añadir jugador al cronómetro');
-
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                    .setCustomId('nombre')
-                    .setLabel('Nombre del jugador en ARK')
-                    .setPlaceholder('Nombre exacto...')
-                    .setStyle(TextInputStyle.Short)
-                    .setRequired(true)
-            )
-        );
-
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('nombre')
+                .setLabel('Nombre del jugador en ARK')
+                .setPlaceholder('Nombre exacto...')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+        ));
         await interaction.showModal(modal);
         return;
     }
 
-    // STOP — jugador individual
+    // STOP individual
     if (id.startsWith('lab_stop_')) {
-        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', ephemeral: true });
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
 
         const jugadorB64 = id.replace('lab_stop_', '');
         const jugador = Buffer.from(jugadorB64, 'base64').toString('utf8');
 
         if (cronometros[jugador] === undefined) {
-            return interaction.reply({ content: `⚠️ **${jugador}** no tiene cronómetro activo.`, ephemeral: true });
+            return interaction.reply({ content: `⚠️ **${jugador}** no tiene cronómetro activo.`, flags: MessageFlags.Ephemeral });
         }
 
         const tiempoMs = Date.now() - cronometros[jugador];
         delete cronometros[jugador];
 
         const lab = cargarLaberinto();
-        // Añadir resultado sin reordenar — la función ordenarResultados lo hace al mostrar
         lab.resultados.push({
             jugador,
             tiempo_ms: tiempoMs,
@@ -516,35 +780,35 @@ async function handleButton(interaction, client) {
 
         await rcon.broadcast(`LABERINTO: ${jugador} ha completado en ${formatearTiempo(tiempoMs)}!`);
 
-        const embed = construirEmbedCronometros();
-        const botones = construirBotonesCronometros(client);
+        const embed = construirEmbedCronometros(lab.evento_activo);
+        const botones = construirBotonesCronometros(lab.evento_activo, client);
         await interaction.update({ embeds: [embed], components: botones });
         return;
     }
 
-    // Finalizar evento (admin)
+    // Finalizar evento
     if (id === 'lab_finalizar') {
-        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', ephemeral: true });
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
 
         detenerActualizacion();
 
         const lab = cargarLaberinto();
+        const evento = lab.evento_activo;
         const completados = ordenarResultados(lab.resultados).filter(r => r.completado);
+
         if (completados.length > 0) {
-            await rcon.broadcast(`LABERINTO TSDE finalizado! Ganador: ${completados[0].jugador} con ${formatearTiempo(completados[0].tiempo_ms)}!`);
+            await rcon.broadcast(`LABERINTO finalizado! Ganador: ${completados[0].jugador} con ${formatearTiempo(completados[0].tiempo_ms)}!`);
         }
 
-        const embed = construirEmbedPodiumFinal();
+        const embed = construirEmbedPodiumFinal(evento);
         await interaction.update({
             embeds: [embed],
-            components: [
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('lab_reset')
-                        .setLabel('🔄 Reset para próximo evento')
-                        .setStyle(ButtonStyle.Danger)
-                )
-            ]
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('lab_reset')
+                    .setLabel('🔄 Reset para próximo evento')
+                    .setStyle(ButtonStyle.Danger)
+            )]
         });
         return;
     }
@@ -552,12 +816,13 @@ async function handleButton(interaction, client) {
     // Reset
     if (id === 'lab_reset') {
         if (!interaction.member.permissions.has('Administrator')) {
-            return interaction.reply({ content: '⛔ Solo administradores.', ephemeral: true });
+            return interaction.reply({ content: '⛔ Solo administradores.', flags: MessageFlags.Ephemeral });
         }
 
         const lab = cargarLaberinto();
         lab.evento_activo = null;
         lab.resultados = [];
+        lab.equipos = [];
         guardarLaberinto(lab);
         Object.keys(cronometros).forEach(k => delete cronometros[k]);
 
@@ -575,14 +840,14 @@ async function handleButton(interaction, client) {
 // --- GESTIÓN DE SELECT MENUS ---
 
 async function handleSelect(interaction, client) {
-    if (interaction.customId === 'lab_anular_select') {
-        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', ephemeral: true });
+    const id = interaction.customId;
+
+    // Anular jugador
+    if (id === 'lab_anular_select') {
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
 
         const jugador = interaction.values[0];
-
-        if (cronometros[jugador] !== undefined) {
-            delete cronometros[jugador];
-        }
+        if (cronometros[jugador] !== undefined) delete cronometros[jugador];
 
         const lab = cargarLaberinto();
         const yaExiste = lab.resultados.some(r => r.jugador === jugador);
@@ -596,13 +861,54 @@ async function handleSelect(interaction, client) {
             guardarLaberinto(lab);
         }
 
-        const embed = construirEmbedCronometros();
-        const botones = construirBotonesCronometros(client);
+        const embed = construirEmbedCronometros(lab.evento_activo);
+        const botones = construirBotonesCronometros(lab.evento_activo, client);
         await interaction.update({ embeds: [embed], components: botones });
+    }
+
+    // Eliminar jugador en modo supervivencia
+    if (id === 'lab_eliminar_select') {
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
+
+        const jugador = interaction.values[0];
+        const lab = cargarLaberinto();
+
+        lab.resultados.push({
+            jugador,
+            tiempo_ms: null,
+            completado: false,
+            eliminado: true,
+            fecha: new Date().toISOString()
+        });
+        guardarLaberinto(lab);
+
+        await rcon.broadcast(`LABERINTO: ${jugador} ha sido eliminado!`);
+
+        const embed = construirEmbedCronometros(lab.evento_activo);
+        const botones = construirBotonesCronometros(lab.evento_activo, client);
+        await interaction.update({ embeds: [embed], components: botones });
+    }
+
+    // Seleccionar equipo para añadir miembro
+    if (id === 'lab_select_equipo_add') {
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
+
+        const nombreEquipo = interaction.values[0];
+        const modal = new ModalBuilder()
+            .setCustomId(`lab_modal_add_miembro_${nombreEquipo}`)
+            .setTitle(`Añadir jugador a ${nombreEquipo}`);
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('jugador')
+                .setLabel('Nombre del jugador en ARK')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+        ));
+        await interaction.showModal(modal);
     }
 }
 
-// --- COMANDO PÚBLICO DE PODIUM ---
+// --- PODIUM PÚBLICO ---
 
 async function verPodium(interaction) {
     const lab = cargarLaberinto();
