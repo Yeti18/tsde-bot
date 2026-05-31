@@ -1,11 +1,9 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } = require('discord.js');
 const fs = require('fs');
 const rcon = require('./rconHelper.js');
 const { programarRecordatorios, cancelarRecordatorios, parsearFecha } = require('./recordatoriosEngine.js');
 
 const DB_PATH = './database.json';
-
-// --- BASE DE DATOS ---
 
 function cargarDB() {
     return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
@@ -15,11 +13,15 @@ function guardarDB(data) {
     fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
 }
 
-// --- HELPERS ---
-
 function esAdmin(interaction) {
     return interaction.member.permissions.has('ManageMessages');
 }
+
+function ephemeralFlags() {
+    return { flags: MessageFlags.Ephemeral };
+}
+
+// --- EMBEDS ---
 
 function construirEmbedEvento(evento) {
     const inscritos = evento.inscritos || [];
@@ -33,12 +35,9 @@ function construirEmbedEvento(evento) {
             { name: '📅 Fecha y hora', value: evento.fecha, inline: true },
             { name: '🏆 Premio', value: evento.premio, inline: true },
             { name: '👥 Plazas', value: `${inscritos.length}/${limite}`, inline: true }
-        )
-        .setFooter({ text: lleno ? '🔴 Evento completo — Lista de espera activa' : '📝 Inscripciones abiertas' });
+        );
 
-    if (evento.descripcion) {
-        embed.setDescription(evento.descripcion);
-    }
+    if (evento.descripcion) embed.setDescription(evento.descripcion);
 
     if (inscritos.length > 0) {
         embed.addFields({
@@ -57,11 +56,18 @@ function construirEmbedEvento(evento) {
         });
     }
 
+    if (evento.estado === 'cerrado') {
+        embed.setFooter({ text: '🔒 Inscripciones cerradas' });
+    } else {
+        embed.setFooter({ text: lleno ? '🔴 Evento completo — Lista de espera activa' : '📝 Inscripciones abiertas' });
+    }
+
     return embed;
 }
 
 function construirBotonesEvento(evento) {
-    const lleno = evento.limite && (evento.inscritos || []).length >= evento.limite;
+    const inscritos = evento.inscritos || [];
+    const lleno = evento.limite && inscritos.length >= evento.limite;
 
     const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -97,7 +103,6 @@ function construirBotonesEvento(evento) {
 
     const rows = [row1, row2];
 
-    // Botón taquillas solo cuando inscripciones cerradas
     if (evento.estado === 'cerrado') {
         const row3 = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -111,7 +116,7 @@ function construirBotonesEvento(evento) {
     return rows;
 }
 
-// --- CREAR EVENTO (desde comando) ---
+// --- MODAL CREAR EVENTO ---
 
 async function mostrarModalCrearEvento(interaction) {
     const modal = new ModalBuilder()
@@ -130,18 +135,10 @@ async function mostrarModalCrearEvento(interaction) {
         new ActionRowBuilder().addComponents(
             new TextInputBuilder()
                 .setCustomId('fecha')
-                .setLabel('Fecha visible (texto libre)')
-                .setPlaceholder('Ej: Sábado 24 de mayo a las 21:00h')
+                .setLabel('Fecha y hora (texto + DD/MM/AAAA HH:MM)')
+                .setPlaceholder('Ej: Sábado 24 de mayo a las 21:00h | 24/05/2026 21:00')
                 .setStyle(TextInputStyle.Short)
                 .setRequired(true)
-        ),
-        new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-                .setCustomId('fecha_timestamp')
-                .setLabel('Fecha recordatorios (DD/MM/AAAA HH:MM)')
-                .setPlaceholder('Ej: 24/05/2026 21:00  — deja vacío si no quieres recordatorios')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(false)
         ),
         new ActionRowBuilder().addComponents(
             new TextInputBuilder()
@@ -158,6 +155,14 @@ async function mostrarModalCrearEvento(interaction) {
                 .setPlaceholder('Ej: 16')
                 .setStyle(TextInputStyle.Short)
                 .setRequired(false)
+        ),
+        new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('descripcion')
+                .setLabel('Descripción / Reglas del evento')
+                .setPlaceholder('Describe las reglas, mecánicas, premios...')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(false)
         )
     );
 
@@ -167,57 +172,82 @@ async function mostrarModalCrearEvento(interaction) {
 // --- GESTIÓN DE MODALES ---
 
 async function handleModal(interaction, client) {
-    await interaction.deferReply({ ephemeral: true });
     if (interaction.customId === 'evt_modal_crear') {
-        const config = require('../config.json');
-        const db = cargarDB();
+        try {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        const titulo = interaction.fields.getTextInputValue('titulo');
-        const fecha = interaction.fields.getTextInputValue('fecha');
-        const premio = interaction.fields.getTextInputValue('premio');
-        const limiteRaw = interaction.fields.getTextInputValue('limite');
-        const fecha_timestamp = interaction.fields.getTextInputValue('fecha_timestamp') || null;
+            const config = require('../config.json');
+            const db = cargarDB();
 
-        const limite = limiteRaw ? parseInt(limiteRaw) : null;
-        const id = Date.now().toString();
+            const titulo = interaction.fields.getTextInputValue('titulo');
+            const fecha = interaction.fields.getTextInputValue('fecha');
+            const premio = interaction.fields.getTextInputValue('premio');
+            const limiteRaw = interaction.fields.getTextInputValue('limite');
+            const descripcion = interaction.fields.getTextInputValue('descripcion') || null;
+            // Parsear fecha_timestamp del campo fecha si viene con | separador
+            let fecha_timestamp = null;
+            if (fecha.includes('|')) {
+                const partes = fecha.split('|').map(p => p.trim());
+                fecha = partes[0];
+                fecha_timestamp = partes[1] || null;
+            }
 
-        const evento = {
-            id,
-            titulo,
-            fecha,
-            premio,
-            fecha_timestamp,
-            limite,
-            inscritos: [],
-            lista_espera: [],
-            estado: 'abierto',
-            creado_por: interaction.user.username,
-            mensaje_id: null,
-            canal_id: config.canales.eventos
-        };
+            const limite = limiteRaw ? parseInt(limiteRaw) : null;
+            const id = Date.now().toString();
 
-        db.eventos_activos[id] = evento;
-        guardarDB(db);
+            if (!config.canales.eventos || config.canales.eventos === 'ID_CANAL_EVENTOS') {
+                return interaction.editReply({ content: '❌ Error: El canal de eventos no está configurado en config.json' });
+            }
 
-        const canal = await client.channels.fetch(config.canales.eventos);
-        const embed = construirEmbedEvento(evento);
-        const botones = construirBotonesEvento(evento);
+            const evento = {
+                id,
+                titulo,
+                fecha,
+                fecha_timestamp,
+                premio,
+                limite,
+                inscritos: [],
+                lista_espera: [],
+                estado: 'abierto',
+                creado_por: interaction.user.username,
+                mensaje_id: null,
+                canal_id: config.canales.eventos
+            };
 
-        const mensaje = await canal.send({ embeds: [embed], components: botones });
-        db.eventos_activos[id].mensaje_id = mensaje.id;
-        guardarDB(db);
+            db.eventos_activos[id] = evento;
+            guardarDB(db);
 
-        await rcon.broadcast(`NUEVO EVENTO: ${titulo} - ${fecha}. Inscribete en Discord!`);
+            const canal = await client.channels.fetch(config.canales.eventos).catch(() => null);
+            if (!canal) {
+                return interaction.editReply({ content: '❌ Error: No puedo acceder al canal de eventos.' });
+            }
 
-        // Programar recordatorios si se proporcionó fecha
-        if (fecha_timestamp) {
-            await programarRecordatorios(client, db.eventos_activos[id]);
+            const embed = construirEmbedEvento(evento);
+            const botones = construirBotonesEvento(evento);
+            const mensaje = await canal.send({ embeds: [embed], components: botones });
+
+            db.eventos_activos[id].mensaje_id = mensaje.id;
+            guardarDB(db);
+
+            if (fecha_timestamp) {
+                await programarRecordatorios(client, db.eventos_activos[id]);
+            }
+
+            await rcon.broadcast(`NUEVO EVENTO: ${titulo} - ${fecha}. Inscribete en Discord!`);
+
+            await interaction.editReply({
+                content: `✅ Evento **${titulo}** creado y publicado en <#${config.canales.eventos}>`
+            });
+
+        } catch (error) {
+            console.error('[EVT] Error creando evento:', error);
+            const msg = `❌ Error: ${error.message}`;
+            if (interaction.deferred) {
+                await interaction.editReply({ content: msg });
+            } else {
+                await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
+            }
         }
-
-        await interaction.editReply({
-            content: `? Evento **${titulo}** creado y publicado en <#${config.canales.eventos}>`,
-            ephemeral: true
-        });
     }
 }
 
@@ -231,16 +261,15 @@ async function handleButton(interaction, client) {
         const eventoId = id.replace('evt_inscribir_', '');
         const db = cargarDB();
         const evento = db.eventos_activos[eventoId];
-        if (!evento) return interaction.reply({ content: 'Evento no encontrado.', ephemeral: true });
+        if (!evento) return interaction.reply({ content: 'Evento no encontrado.', flags: MessageFlags.Ephemeral });
 
         const nombre = interaction.user.username;
         const penalizados = db.penalizados || [];
 
-        // Comprobar penalización
         if (penalizados.includes(nombre)) {
             return interaction.reply({
-                content: '⛔ Estás penalizado y no puedes inscribirte en eventos temporalmente. Contacta con un administrador.',
-                ephemeral: true
+                content: '⛔ Estás penalizado y no puedes inscribirte en eventos. Contacta con un administrador.',
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -248,16 +277,16 @@ async function handleButton(interaction, client) {
 
         if (!lleno) {
             if (evento.inscritos.includes(nombre)) {
-                return interaction.reply({ content: '⚠️ Ya estás inscrito en este evento.', ephemeral: true });
+                return interaction.reply({ content: '⚠️ Ya estás inscrito en este evento.', flags: MessageFlags.Ephemeral });
             }
             evento.inscritos.push(nombre);
-            await interaction.reply({ content: `✅ ¡Inscripción confirmada en **${evento.titulo}**! Recuerda estar 15 minutos antes.`, ephemeral: true });
+            await interaction.reply({ content: `✅ ¡Inscripción confirmada en **${evento.titulo}**! Recuerda estar 15 minutos antes.`, flags: MessageFlags.Ephemeral });
         } else {
             if (evento.lista_espera.includes(nombre)) {
-                return interaction.reply({ content: '⚠️ Ya estás en la lista de espera.', ephemeral: true });
+                return interaction.reply({ content: '⚠️ Ya estás en la lista de espera.', flags: MessageFlags.Ephemeral });
             }
             evento.lista_espera.push(nombre);
-            await interaction.reply({ content: `⏳ Te hemos añadido a la lista de espera de **${evento.titulo}**. Te avisaremos si se libera una plaza.`, ephemeral: true });
+            await interaction.reply({ content: `⏳ Te hemos añadido a la lista de espera de **${evento.titulo}**.`, flags: MessageFlags.Ephemeral });
         }
 
         guardarDB(db);
@@ -270,9 +299,9 @@ async function handleButton(interaction, client) {
         const eventoId = id.replace('evt_cancelar_inscripcion_', '');
         const db = cargarDB();
         const evento = db.eventos_activos[eventoId];
-        if (!evento) return interaction.reply({ content: 'Evento no encontrado.', ephemeral: true });
+        if (!evento) return interaction.reply({ content: 'Evento no encontrado.', flags: MessageFlags.Ephemeral });
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const nombre = interaction.user.username;
         const ahora = Date.now();
@@ -292,12 +321,12 @@ async function handleButton(interaction, client) {
                 const canal = await client.channels.fetch(evento.canal_id);
                 canal.send(`🎉 <@${siguiente}> ¡Se ha liberado una plaza en **${evento.titulo}**! Ya estás inscrito.`);
             }
-            await interaction.followUp({ content: `✅ Has cancelado tu inscripción en **${evento.titulo}**.`, ephemeral: true });
+            await interaction.followUp({ content: `✅ Has cancelado tu inscripción en **${evento.titulo}**.`, flags: MessageFlags.Ephemeral });
         } else if (evento.lista_espera.includes(nombre)) {
             evento.lista_espera = evento.lista_espera.filter(u => u !== nombre);
-            await interaction.followUp({ content: `✅ Te hemos eliminado de la lista de espera.`, ephemeral: true });
+            await interaction.followUp({ content: `✅ Te hemos eliminado de la lista de espera.`, flags: MessageFlags.Ephemeral });
         } else {
-            return interaction.followUp({ content: '⚠️ No estás inscrito en este evento.', ephemeral: true });
+            return interaction.followUp({ content: '⚠️ No estás inscrito en este evento.', flags: MessageFlags.Ephemeral });
         }
 
         guardarDB(db);
@@ -310,7 +339,7 @@ async function handleButton(interaction, client) {
         const eventoId = id.replace('evt_ver_inscritos_', '');
         const db = cargarDB();
         const evento = db.eventos_activos[eventoId];
-        if (!evento) return interaction.reply({ content: 'Evento no encontrado.', ephemeral: true });
+        if (!evento) return interaction.reply({ content: 'Evento no encontrado.', flags: MessageFlags.Ephemeral });
 
         const lista = evento.inscritos.length > 0
             ? evento.inscritos.map((u, i) => `${i + 1}. ${u}`).join('\n')
@@ -330,52 +359,52 @@ async function handleButton(interaction, client) {
                     )
                     .setColor(0x9B59B6)
             ],
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 
-    // Cerrar inscripciones (solo admin)
+    // Cerrar inscripciones
     if (id.startsWith('evt_cerrar_')) {
-        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', ephemeral: true });
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
         const eventoId = id.replace('evt_cerrar_', '');
         const db = cargarDB();
         const evento = db.eventos_activos[eventoId];
-        if (!evento) return interaction.reply({ content: 'Evento no encontrado.', ephemeral: true });
+        if (!evento) return interaction.reply({ content: 'Evento no encontrado.', flags: MessageFlags.Ephemeral });
 
-        // Deferimos ANTES de cualquier operación lenta
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         evento.estado = 'cerrado';
         guardarDB(db);
         await actualizarMensajeEvento(interaction, evento, client);
         await rcon.broadcast(`Inscripciones cerradas para: ${evento.titulo}.`);
-        return interaction.followUp({ content: `🔒 Inscripciones cerradas para **${evento.titulo}**.`, ephemeral: true });
+        return interaction.followUp({ content: `🔒 Inscripciones cerradas para **${evento.titulo}**.`, flags: MessageFlags.Ephemeral });
     }
 
     // Asignar taquillas del Coliseo
     if (id.startsWith('evt_taquillas_')) {
-        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', ephemeral: true });
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
         const eventoId = id.replace('evt_taquillas_', '');
         const db = cargarDB();
         const evento = db.eventos_activos[eventoId];
-        if (!evento) return interaction.reply({ content: 'Evento no encontrado.', ephemeral: true });
+        if (!evento) return interaction.reply({ content: 'Evento no encontrado.', flags: MessageFlags.Ephemeral });
 
         const coliseo = require('./coliseoEngine.js');
         await coliseo.asignarTaquillas(interaction, client, evento);
         return;
     }
 
-    // Cancelar evento completo (solo admin)
+    // Cancelar evento completo
     if (id.startsWith('evt_cancelar_evento_')) {
-        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', ephemeral: true });
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
         const eventoId = id.replace('evt_cancelar_evento_', '');
         const db = cargarDB();
         const evento = db.eventos_activos[eventoId];
-        if (!evento) return interaction.reply({ content: 'Evento no encontrado.', ephemeral: true });
+        if (!evento) return interaction.reply({ content: 'Evento no encontrado.', flags: MessageFlags.Ephemeral });
 
-        // Guardar en historial
-        db.historial_eventos.push({ ...evento, estado: 'cancelado', cancelado_en: new Date().toISOString() });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
         cancelarRecordatorios(eventoId);
+        db.historial_eventos.push({ ...evento, estado: 'cancelado', cancelado_en: new Date().toISOString() });
         delete db.eventos_activos[eventoId];
         guardarDB(db);
 
@@ -391,12 +420,12 @@ async function handleButton(interaction, client) {
             components: []
         });
 
-        await rcon.broadcast(`EVENTO CANCELADO: ${evento.titulo}. Disculpad las molestias.`);
-        return interaction.reply({ content: `🗑️ Evento **${evento.titulo}** cancelado.`, ephemeral: true });
+        await rcon.broadcast(`EVENTO CANCELADO: ${evento.titulo}.`);
+        return interaction.followUp({ content: `🗑️ Evento **${evento.titulo}** cancelado.`, flags: MessageFlags.Ephemeral });
     }
 }
 
-// --- ACTUALIZAR MENSAJE DEL EVENTO ---
+// --- ACTUALIZAR MENSAJE ---
 
 async function actualizarMensajeEvento(interaction, evento, client) {
     try {
@@ -412,5 +441,3 @@ async function actualizarMensajeEvento(interaction, evento, client) {
 }
 
 module.exports = { mostrarModalCrearEvento, handleButton, handleModal, handleSelect: async () => {} };
-
-
