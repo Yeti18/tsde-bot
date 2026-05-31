@@ -144,8 +144,8 @@ async function mostrarModalCrearEvento(interaction) {
             new TextInputBuilder()
                 .setCustomId('premio')
                 .setLabel('Premio')
-                .setPlaceholder('Ej: 1000 TSDE Coins + Rex nivel 350')
-                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Ej: 1er lugar: 1000 Coins + Rex\n2do lugar: 500 Coins\nTodos: 100 Coins por participar')
+                .setStyle(TextInputStyle.Paragraph)
                 .setRequired(true)
         ),
         new ActionRowBuilder().addComponents(
