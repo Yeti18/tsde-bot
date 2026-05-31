@@ -167,6 +167,7 @@ async function mostrarModalCrearEvento(interaction) {
 // --- GESTIÓN DE MODALES ---
 
 async function handleModal(interaction, client) {
+    await interaction.deferReply({ ephemeral: true });
     if (interaction.customId === 'evt_modal_crear') {
         const config = require('../config.json');
         const db = cargarDB();
@@ -213,8 +214,8 @@ async function handleModal(interaction, client) {
             await programarRecordatorios(client, db.eventos_activos[id]);
         }
 
-        await interaction.reply({
-            content: `✅ Evento **${titulo}** creado y publicado en <#${config.canales.eventos}>`,
+        await interaction.editReply({
+            content: `? Evento **${titulo}** creado y publicado en <#${config.canales.eventos}>`,
             ephemeral: true
         });
     }
@@ -411,3 +412,5 @@ async function actualizarMensajeEvento(interaction, evento, client) {
 }
 
 module.exports = { mostrarModalCrearEvento, handleButton, handleModal, handleSelect: async () => {} };
+
+

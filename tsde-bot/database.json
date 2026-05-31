@@ -1,6 +1,23 @@
 {
   "jugadores": {},
-  "eventos_activos": {},
+  "eventos_activos": {
+    "1780173942909": {
+      "id": "1780173942909",
+      "titulo": "a",
+      "fecha": "a",
+      "premio": "a",
+      "fecha_timestamp": null,
+      "limite": null,
+      "inscritos": [
+        "yeti124"
+      ],
+      "lista_espera": [],
+      "estado": "cerrado",
+      "creado_por": "yeti124",
+      "mensaje_id": "1510383731016208434",
+      "canal_id": "1506614381109186660"
+    }
+  },
   "torneos_activos": {},
   "historial_eventos": [],
   "penalizados": [],
