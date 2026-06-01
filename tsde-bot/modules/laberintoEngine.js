@@ -358,7 +358,7 @@ function construirEmbedPodiumFinal(evento) {
         const medallas = ['🥇', '🥈', '🥉'];
         const lineas = rankingEquipos.map((eq, i) => {
             const medal = i < 3 ? medallas[i] : `\`${i + 1}.\``;
-            const tiempo = eq.tiempo ? `Promedio: ${formatearTiempo(eq.tiempo)}` : `${eq.completados}/${eq.total} completados`;
+            const tiempo = eq.tiempo ? `Promedio: `${formatearTiempo(eq.tiempo)}`` : `${eq.completados}/${eq.total} completados`;
             return `${medal} **${eq.nombre}** — ${tiempo}`;
         });
         embed.setDescription(lineas.join('\n'));
@@ -785,11 +785,13 @@ async function handleButton(interaction, client) {
         });
         guardarLaberinto(lab);
 
-        await rcon.broadcast(`LABERINTO: ${jugador} ha completado en ${formatearTiempo(tiempoMs)}!`);
-
+        // Responder a Discord ANTES del broadcast para evitar timeout
         const embed = construirEmbedCronometros(lab.evento_activo);
         const botones = construirBotonesCronometros(lab.evento_activo, client);
         await interaction.update({ embeds: [embed], components: botones });
+
+        // Broadcast RCON después de responder a Discord
+        rcon.broadcast(`LABERINTO: ${jugador} ha completado en ${formatearTiempo(tiempoMs)}!`).catch(() => {});
         return;
     }
 
@@ -803,10 +805,6 @@ async function handleButton(interaction, client) {
         const evento = lab.evento_activo;
         const completados = ordenarResultados(lab.resultados).filter(r => r.completado);
 
-        if (completados.length > 0) {
-            await rcon.broadcast(`LABERINTO finalizado! Ganador: ${completados[0].jugador} con ${formatearTiempo(completados[0].tiempo_ms)}!`);
-        }
-
         const embed = construirEmbedPodiumFinal(evento);
         await interaction.update({
             embeds: [embed],
@@ -817,6 +815,10 @@ async function handleButton(interaction, client) {
                     .setStyle(ButtonStyle.Danger)
             )]
         });
+
+        if (completados.length > 0) {
+            rcon.broadcast(`LABERINTO finalizado! Ganador: ${completados[0].jugador} con ${formatearTiempo(completados[0].tiempo_ms)}!`).catch(() => {});
+        }
         return;
     }
 
