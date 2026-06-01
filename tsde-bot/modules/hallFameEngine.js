@@ -163,7 +163,7 @@ async function mostrarModalAñadir(interaction) {
         new ActionRowBuilder().addComponents(
             new TextInputBuilder()
                 .setCustomId('categoria')
-                .setLabel('Categoría (torneo/laberinto/coliseo/tribu/especial)')
+                .setLabel('Categoría (torneo/coliseo/tribu/especial)')
                 .setPlaceholder('especial')
                 .setStyle(TextInputStyle.Short)
                 .setRequired(true)

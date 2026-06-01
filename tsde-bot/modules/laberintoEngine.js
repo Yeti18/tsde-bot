@@ -201,8 +201,13 @@ function construirEmbedCronometros(evento) {
                 .map(j => lab.resultados.find(r => r.jugador === j))
                 .filter(r => r && r.completado);
 
-            const tiempoTotal = tiemposEquipo.length === equipo.jugadores.length
-                ? `⏱️ Total: \`${formatearTiempo(tiemposEquipo.reduce((s, r) => s + r.tiempo_ms, 0))}\``
+            const todosCompletados = tiemposEquipo.length === equipo.jugadores.length;
+            const tiempoPromedio = todosCompletados
+                ? Math.round(tiemposEquipo.reduce((s, r) => s + r.tiempo_ms, 0) / equipo.jugadores.length)
+                : null;
+
+            const tiempoTotal = tiempoPromedio
+                ? `⏱️ Promedio: \`${formatearTiempo(tiempoPromedio)}\``
                 : `${tiemposEquipo.length}/${equipo.jugadores.length} completados`;
 
             embed.addFields({
@@ -337,10 +342,12 @@ function construirEmbedPodiumFinal(evento) {
             const tiempos = eq.jugadores
                 .map(j => lab.resultados.find(r => r.jugador === j))
                 .filter(r => r && r.completado);
-            const total = tiempos.length === eq.jugadores.length
-                ? tiempos.reduce((s, r) => s + r.tiempo_ms, 0)
+            const todosCompletados = tiempos.length === eq.jugadores.length;
+            // Tiempo promedio por jugador — justo para equipos de distinto tamaño
+            const promedio = todosCompletados
+                ? Math.round(tiempos.reduce((s, r) => s + r.tiempo_ms, 0) / eq.jugadores.length)
                 : null;
-            return { nombre: eq.nombre, tiempo: total, completados: tiempos.length, total: eq.jugadores.length };
+            return { nombre: eq.nombre, tiempo: promedio, completados: tiempos.length, total: eq.jugadores.length };
         }).sort((a, b) => {
             if (a.tiempo && !b.tiempo) return -1;
             if (!a.tiempo && b.tiempo) return 1;
@@ -351,7 +358,7 @@ function construirEmbedPodiumFinal(evento) {
         const medallas = ['🥇', '🥈', '🥉'];
         const lineas = rankingEquipos.map((eq, i) => {
             const medal = i < 3 ? medallas[i] : `\`${i + 1}.\``;
-            const tiempo = eq.tiempo ? `\`${formatearTiempo(eq.tiempo)}\`` : `${eq.completados}/${eq.total} completados`;
+            const tiempo = eq.tiempo ? `Promedio: `${formatearTiempo(eq.tiempo)}`` : `${eq.completados}/${eq.total} completados`;
             return `${medal} **${eq.nombre}** — ${tiempo}`;
         });
         embed.setDescription(lineas.join('\n'));
