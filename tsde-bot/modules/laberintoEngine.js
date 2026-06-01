@@ -358,7 +358,7 @@ function construirEmbedPodiumFinal(evento) {
         const medallas = ['🥇', '🥈', '🥉'];
         const lineas = rankingEquipos.map((eq, i) => {
             const medal = i < 3 ? medallas[i] : `\`${i + 1}.\``;
-            const tiempo = eq.tiempo ? `Promedio: `${formatearTiempo(eq.tiempo)}`` : `${eq.completados}/${eq.total} completados`;
+            const tiempo = eq.tiempo ? `Promedio: ${formatearTiempo(eq.tiempo)}` : `${eq.completados}/${eq.total} completados`;
             return `${medal} **${eq.nombre}** — ${tiempo}`;
         });
         embed.setDescription(lineas.join('\n'));
