@@ -81,7 +81,7 @@ function construirEmbedHoFCompleto(hof) {
             embed.addFields({
                 name: `${cat.emoji} ${cat.label}`,
                 value: entradas.map(e =>
-                    `**${e.nombre}** — ${e.logro} *(${e.fecha})*`
+                    `**${e.nombre}** — ${e.logro} *(${e.fecha})* \`ID: ${e.id}\``
                 ).join('\n'),
                 inline: false
             });
