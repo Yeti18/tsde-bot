@@ -114,7 +114,7 @@ function construirModalNombreArk() {
             new TextInputBuilder()
                 .setCustomId('nombre_ark')
                 .setLabel('Tu nombre exacto en ARK: Survival Ascended')
-                .setPlaceholder('Ej: Yeti124, Sangui, xXDragonSlayerXx...')
+                .setPlaceholder('Escribe tu nombre exacto en ARK...')
                 .setStyle(TextInputStyle.Short)
                 .setMinLength(2)
                 .setMaxLength(50)
@@ -276,6 +276,11 @@ async function handleModal(interaction, client) {
 
         } catch (error) {
             console.error('[REG] Error en registro:', error);
+            // Ignorar errores de permisos de apodo (código 50013)
+            if (error.code === 50013) {
+                console.warn('[REG] Sin permisos para cambiar apodo — registro completado igualmente');
+                return;
+            }
             const msg = { content: `❌ Error al completar el registro: ${error.message}\nContacta con un administrador.`, ephemeral: true };
             if (interaction.replied || interaction.deferred) {
                 await interaction.followUp(msg);
