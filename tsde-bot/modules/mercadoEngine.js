@@ -5,7 +5,8 @@ const {
     ButtonStyle,
     ModalBuilder,
     TextInputBuilder,
-    TextInputStyle
+    TextInputStyle,
+    MessageFlags
 } = require('discord.js');
 const fs = require('fs');
 const config = require('../config.json');
@@ -30,7 +31,6 @@ function esAdmin(interaction) {
     return interaction.member.permissions.has('ManageMessages');
 }
 
-// Colores por tipo de anuncio
 const COLORES = {
     dino:     0x2ECC71,
     item:     0x3498DB,
@@ -57,27 +57,33 @@ function construirEmbedAnuncio(anuncio) {
         .addFields(
             { name: '📦 Tipo', value: anuncio.tipo.charAt(0).toUpperCase() + anuncio.tipo.slice(1), inline: true },
             { name: '👤 Vendedor', value: anuncio.vendedor, inline: true },
+            { name: '🏪 Puesto', value: anuncio.puesto || 'Sin asignar', inline: true },
             { name: '💰 Precio', value: anuncio.precio, inline: true }
         );
 
     // Campos específicos de dinos
     if (anuncio.tipo === 'dino') {
-        if (anuncio.nivel)       embed.addFields({ name: '⭐ Nivel', value: anuncio.nivel, inline: true });
+        if (anuncio.nivel)        embed.addFields({ name: '⭐ Nivel', value: anuncio.nivel, inline: true });
         if (anuncio.estadisticas) embed.addFields({ name: '📊 Estadísticas', value: anuncio.estadisticas, inline: true });
-        if (anuncio.mutaciones)  embed.addFields({ name: '🧬 Mutaciones', value: anuncio.mutaciones, inline: true });
-        if (anuncio.sexo)        embed.addFields({ name: '⚥ Sexo', value: anuncio.sexo, inline: true });
-        if (anuncio.color)       embed.addFields({ name: '🎨 Color', value: anuncio.color, inline: true });
+        if (anuncio.mutaciones)   embed.addFields({ name: '🧬 Mutaciones', value: anuncio.mutaciones, inline: true });
+        if (anuncio.sexo)         embed.addFields({ name: '⚥ Sexo', value: anuncio.sexo, inline: true });
+        if (anuncio.color)        embed.addFields({ name: '🎨 Color', value: anuncio.color, inline: true });
+    }
+
+    // Cantidad/calidad para items y recursos
+    if (anuncio.tipo !== 'dino' && anuncio.estadisticas) {
+        embed.addFields({ name: '📊 Cantidad / Calidad', value: anuncio.estadisticas, inline: true });
     }
 
     if (anuncio.notas) {
-        embed.addFields({ name: '📝 Notas adicionales', value: anuncio.notas, inline: false });
+        embed.addFields({ name: '📝 Notas', value: anuncio.notas, inline: false });
     }
 
     if (anuncio.vendido) {
         embed.addFields({ name: '🔴 Estado', value: 'VENDIDO', inline: true });
         embed.setFooter({ text: 'Este artículo ya no está disponible' });
     } else {
-        embed.setFooter({ text: `ID: ${anuncio.id} · Publicado por ${anuncio.vendedor} · Contacta por privado o con el botón` });
+        embed.setFooter({ text: `Publicado por ${anuncio.vendedor} · Puesto: ${anuncio.puesto || 'Sin asignar'}` });
         embed.setTimestamp(new Date(anuncio.fecha));
     }
 
@@ -100,9 +106,9 @@ function construirBotonesAnuncio(anuncio) {
                 .setLabel('🗑️ Retirar anuncio')
                 .setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
-                .setCustomId(`mer_contactar_${anuncio.id}`)
+                .setURL(`https://discord.com/users/${anuncio.vendedorId}`)
                 .setLabel('📩 Contactar vendedor')
-                .setStyle(ButtonStyle.Secondary)
+                .setStyle(ButtonStyle.Link)
         )
     ];
 }
@@ -110,9 +116,12 @@ function construirBotonesAnuncio(anuncio) {
 // --- MODAL VENDER DINO ---
 
 async function mostrarModalVenderDino(interaction) {
+    const db = cargarDB();
+    const puestoAsignado = db.mercaderes?.[interaction.user.id]?.puesto || 'Sin asignar';
+
     const modal = new ModalBuilder()
         .setCustomId('mer_modal_dino')
-        .setTitle('Publicar dino en venta');
+        .setTitle(`Publicar dino — ${puestoAsignado}`);
 
     modal.addComponents(
         new ActionRowBuilder().addComponents(
@@ -163,9 +172,12 @@ async function mostrarModalVenderDino(interaction) {
 // --- MODAL VENDER ITEM/RECURSO ---
 
 async function mostrarModalVenderItem(interaction, tipo) {
+    const db = cargarDB();
+    const puestoAsignado = db.mercaderes?.[interaction.user.id]?.puesto || 'Sin asignar';
+
     const modal = new ModalBuilder()
         .setCustomId(`mer_modal_${tipo}`)
-        .setTitle(`Publicar ${tipo} en venta`);
+        .setTitle(`Publicar ${tipo} — ${puestoAsignado}`);
 
     modal.addComponents(
         new ActionRowBuilder().addComponents(
@@ -210,7 +222,6 @@ async function mostrarModalVenderItem(interaction, tipo) {
 async function handleModal(interaction, client) {
     const id = interaction.customId;
 
-    // Modal dino
     if (id === 'mer_modal_dino') {
         try {
             const nombre = interaction.fields.getTextInputValue('nombre').trim();
@@ -219,16 +230,18 @@ async function handleModal(interaction, client) {
             const precio = interaction.fields.getTextInputValue('precio').trim();
             const notas = interaction.fields.getTextInputValue('notas').trim();
 
-            // Parsear nivel y stats del campo combinado
             const partes = nivel_stats.split('|').map(p => p.trim());
             const nivel = partes[0] || nivel_stats;
             const estadisticas = partes.slice(1).join(' | ') || null;
 
-            // Parsear mutaciones, sexo y color
             const partesMSC = mut_sexo_color.split('|').map(p => p.trim());
             const mutaciones = partesMSC[0] || null;
             const sexo = partesMSC[1] || null;
             const color = partesMSC[2] || null;
+
+            // Obtener puesto del mercader
+            const db = cargarDB();
+            const puesto = db.mercaderes?.[interaction.user.id]?.puesto || 'Sin asignar';
 
             await publicarAnuncio(interaction, client, {
                 tipo: 'dino',
@@ -239,16 +252,16 @@ async function handleModal(interaction, client) {
                 sexo,
                 color,
                 precio,
+                puesto,
                 notas: notas || null
             });
 
         } catch (error) {
             console.error('[MER] Error publicando dino:', error);
-            await interaction.reply({ content: `❌ Error: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Error: ${error.message}`, flags: MessageFlags.Ephemeral });
         }
     }
 
-    // Modal item o recurso
     if (id === 'mer_modal_item' || id === 'mer_modal_recurso' || id === 'mer_modal_servicio') {
         try {
             const tipo = id.replace('mer_modal_', '');
@@ -257,17 +270,21 @@ async function handleModal(interaction, client) {
             const precio = interaction.fields.getTextInputValue('precio').trim();
             const notas = interaction.fields.getTextInputValue('notas').trim();
 
+            const db = cargarDB();
+            const puesto = db.mercaderes?.[interaction.user.id]?.puesto || 'Sin asignar';
+
             await publicarAnuncio(interaction, client, {
                 tipo,
                 nombre,
                 estadisticas: cantidad_calidad,
                 precio,
+                puesto,
                 notas: notas || null
             });
 
         } catch (error) {
             console.error('[MER] Error publicando item:', error);
-            await interaction.reply({ content: `❌ Error: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Error: ${error.message}`, flags: MessageFlags.Ephemeral });
         }
     }
 }
@@ -293,7 +310,7 @@ async function publicarAnuncio(interaction, client, datos) {
     guardarDB(db);
 
     const canal = await client.channels.fetch(config.canales.mercado).catch(() => null);
-    if (!canal) return interaction.reply({ content: '❌ Canal de mercado no configurado.', ephemeral: true });
+    if (!canal) return interaction.reply({ content: '❌ Canal de mercado no configurado.', flags: MessageFlags.Ephemeral });
 
     const embed = construirEmbedAnuncio(anuncio);
     const botones = construirBotonesAnuncio(anuncio);
@@ -304,7 +321,7 @@ async function publicarAnuncio(interaction, client, datos) {
 
     await interaction.reply({
         content: `✅ Anuncio publicado en <#${config.canales.mercado}>`,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 }
 
@@ -313,16 +330,14 @@ async function publicarAnuncio(interaction, client, datos) {
 async function handleButton(interaction, client) {
     const id = interaction.customId;
 
-    // Marcar como vendido
     if (id.startsWith('mer_vendido_')) {
         const anuncioId = id.replace('mer_vendido_', '');
         const db = cargarDB();
         const anuncio = db.mercado?.[anuncioId];
-        if (!anuncio) return interaction.reply({ content: '❌ Anuncio no encontrado.', ephemeral: true });
+        if (!anuncio) return interaction.reply({ content: '❌ Anuncio no encontrado.', flags: MessageFlags.Ephemeral });
 
-        // Solo el vendedor o admin
         if (anuncio.vendedorId !== interaction.user.id && !esAdmin(interaction)) {
-            return interaction.reply({ content: '⛔ Solo el vendedor puede marcar esto como vendido.', ephemeral: true });
+            return interaction.reply({ content: '⛔ Solo el vendedor puede marcar esto como vendido.', flags: MessageFlags.Ephemeral });
         }
 
         anuncio.vendido = true;
@@ -333,15 +348,14 @@ async function handleButton(interaction, client) {
         return;
     }
 
-    // Retirar anuncio
     if (id.startsWith('mer_retirar_')) {
         const anuncioId = id.replace('mer_retirar_', '');
         const db = cargarDB();
         const anuncio = db.mercado?.[anuncioId];
-        if (!anuncio) return interaction.reply({ content: '❌ Anuncio no encontrado.', ephemeral: true });
+        if (!anuncio) return interaction.reply({ content: '❌ Anuncio no encontrado.', flags: MessageFlags.Ephemeral });
 
         if (anuncio.vendedorId !== interaction.user.id && !esAdmin(interaction)) {
-            return interaction.reply({ content: '⛔ Solo el vendedor puede retirar este anuncio.', ephemeral: true });
+            return interaction.reply({ content: '⛔ Solo el vendedor puede retirar este anuncio.', flags: MessageFlags.Ephemeral });
         }
 
         delete db.mercado[anuncioId];
@@ -358,48 +372,45 @@ async function handleButton(interaction, client) {
         });
         return;
     }
-
-    // Contactar vendedor
-    if (id.startsWith('mer_contactar_')) {
-        const anuncioId = id.replace('mer_contactar_', '');
-        const db = cargarDB();
-        const anuncio = db.mercado?.[anuncioId];
-        if (!anuncio) return interaction.reply({ content: '❌ Anuncio no encontrado.', ephemeral: true });
-
-        if (anuncio.vendido) {
-            return interaction.reply({ content: '🔴 Este artículo ya ha sido vendido.', ephemeral: true });
-        }
-
-        return interaction.reply({
-            content: `📩 Para comprar **${anuncio.nombre}** contacta con **${anuncio.vendedor}** por mensaje privado en Discord.\n\n⚠️ Los admins no median en intercambios entre jugadores.`,
-            ephemeral: true
-        });
-    }
 }
 
-// --- COMANDO DAR/QUITAR ROL MERCADER (admin) ---
+// --- GESTIÓN DE ROLES MERCADER ---
 
-async function darRolMercader(interaction, client, usuario) {
+async function darRolMercader(interaction, client, usuario, numPuesto) {
     try {
         const guild = interaction.guild;
         const member = await guild.members.fetch(usuario.id);
         const rol = guild.roles.cache.find(r => r.id === config.roles.mercader || r.name === 'Mercader');
 
-        if (!rol) return interaction.reply({ content: '❌ Rol Mercader no encontrado. Verifica el ID en config.json', ephemeral: true });
+        if (!rol) return interaction.reply({ content: '❌ Rol Mercader no encontrado.', flags: MessageFlags.Ephemeral });
 
         await member.roles.add(rol);
+
+        // Guardar puesto asignado
+        const db = cargarDB();
+        if (!db.mercaderes) db.mercaderes = {};
+        db.mercaderes[usuario.id] = {
+            username: usuario.username,
+            puesto: numPuesto ? `Puesto ${numPuesto}` : 'Sin asignar',
+            fechaAsignacion: new Date().toISOString()
+        };
+        guardarDB(db);
 
         await interaction.reply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('🛒 Puesto de mercado asignado')
-                    .setDescription(`**${usuario.username}** ahora tiene el rol de Mercader y puede publicar en el mercado con \`/vender\`.`)
                     .setColor(0xE67E22)
+                    .addFields(
+                        { name: '👤 Mercader', value: usuario.username, inline: true },
+                        { name: '🏪 Puesto', value: numPuesto ? `Puesto ${numPuesto}` : 'Sin asignar', inline: true }
+                    )
+                    .setDescription(`**${usuario.username}** puede publicar en el mercado con \`/vender\`.`)
             ]
         });
 
     } catch (error) {
-        await interaction.reply({ content: `❌ Error: ${error.message}`, ephemeral: true });
+        await interaction.reply({ content: `❌ Error: ${error.message}`, flags: MessageFlags.Ephemeral });
     }
 }
 
@@ -409,9 +420,16 @@ async function quitarRolMercader(interaction, client, usuario) {
         const member = await guild.members.fetch(usuario.id);
         const rol = guild.roles.cache.find(r => r.id === config.roles.mercader || r.name === 'Mercader');
 
-        if (!rol) return interaction.reply({ content: '❌ Rol Mercader no encontrado.', ephemeral: true });
+        if (!rol) return interaction.reply({ content: '❌ Rol Mercader no encontrado.', flags: MessageFlags.Ephemeral });
 
         await member.roles.remove(rol);
+
+        // Eliminar puesto
+        const db = cargarDB();
+        if (db.mercaderes?.[usuario.id]) {
+            delete db.mercaderes[usuario.id];
+            guardarDB(db);
+        }
 
         await interaction.reply({
             embeds: [
@@ -423,7 +441,7 @@ async function quitarRolMercader(interaction, client, usuario) {
         });
 
     } catch (error) {
-        await interaction.reply({ content: `❌ Error: ${error.message}`, ephemeral: true });
+        await interaction.reply({ content: `❌ Error: ${error.message}`, flags: MessageFlags.Ephemeral });
     }
 }
 
