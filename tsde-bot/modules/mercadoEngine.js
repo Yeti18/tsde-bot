@@ -6,7 +6,9 @@ const {
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
-    MessageFlags
+    MessageFlags,
+    ChannelType,
+    PermissionsBitField
 } = require('discord.js');
 const fs = require('fs');
 const config = require('../config.json');
@@ -61,7 +63,6 @@ function construirEmbedAnuncio(anuncio) {
             { name: '💰 Precio', value: anuncio.precio, inline: true }
         );
 
-    // Campos específicos de dinos
     if (anuncio.tipo === 'dino') {
         if (anuncio.nivel)        embed.addFields({ name: '⭐ Nivel', value: anuncio.nivel, inline: true });
         if (anuncio.estadisticas) embed.addFields({ name: '📊 Estadísticas', value: anuncio.estadisticas, inline: true });
@@ -70,7 +71,6 @@ function construirEmbedAnuncio(anuncio) {
         if (anuncio.color)        embed.addFields({ name: '🎨 Color', value: anuncio.color, inline: true });
     }
 
-    // Cantidad/calidad para items y recursos
     if (anuncio.tipo !== 'dino' && anuncio.estadisticas) {
         embed.addFields({ name: '📊 Cantidad / Calidad', value: anuncio.estadisticas, inline: true });
     }
@@ -83,17 +83,25 @@ function construirEmbedAnuncio(anuncio) {
         embed.addFields({ name: '🔴 Estado', value: 'VENDIDO', inline: true });
         embed.setFooter({ text: 'Este artículo ya no está disponible' });
     } else {
-        embed.setFooter({ text: `Publicado por ${anuncio.vendedor} · Puesto: ${anuncio.puesto || 'Sin asignar'}` });
+        embed.setFooter({ text: `Publicado por ${anuncio.vendedor} · ${anuncio.puesto || 'Sin asignar'}` });
         embed.setTimestamp(new Date(anuncio.fecha));
     }
 
     return embed;
 }
 
-// --- BOTONES ---
+// --- BOTONES DE ANUNCIO ---
 
 function construirBotonesAnuncio(anuncio) {
-    if (anuncio.vendido) return [];
+    // Botón de contacto disponible para todos
+    const btnContactar = new ButtonBuilder()
+        .setURL(`https://discord.com/users/${anuncio.vendedorId}`)
+        .setLabel('📩 Contactar vendedor')
+        .setStyle(ButtonStyle.Link);
+
+    if (anuncio.vendido) {
+        return [new ActionRowBuilder().addComponents(btnContactar)];
+    }
 
     return [
         new ActionRowBuilder().addComponents(
@@ -105,10 +113,7 @@ function construirBotonesAnuncio(anuncio) {
                 .setCustomId(`mer_retirar_${anuncio.id}`)
                 .setLabel('🗑️ Retirar anuncio')
                 .setStyle(ButtonStyle.Danger),
-            new ButtonBuilder()
-                .setURL(`https://discord.com/users/${anuncio.vendedorId}`)
-                .setLabel('📩 Contactar vendedor')
-                .setStyle(ButtonStyle.Link)
+            btnContactar
         )
     ];
 }
@@ -169,7 +174,7 @@ async function mostrarModalVenderDino(interaction) {
     await interaction.showModal(modal);
 }
 
-// --- MODAL VENDER ITEM/RECURSO ---
+// --- MODAL VENDER ITEM/RECURSO/SERVICIO ---
 
 async function mostrarModalVenderItem(interaction, tipo) {
     const db = cargarDB();
@@ -239,7 +244,6 @@ async function handleModal(interaction, client) {
             const sexo = partesMSC[1] || null;
             const color = partesMSC[2] || null;
 
-            // Obtener puesto del mercader
             const db = cargarDB();
             const puesto = db.mercaderes?.[interaction.user.id]?.puesto || 'Sin asignar';
 
@@ -289,9 +293,27 @@ async function handleModal(interaction, client) {
     }
 }
 
-// --- PUBLICAR ANUNCIO ---
+// --- PUBLICAR ANUNCIO EN EL HILO DEL MERCADER ---
 
 async function publicarAnuncio(interaction, client, datos) {
+    const db = cargarDB();
+    const mercaderData = db.mercaderes?.[interaction.user.id];
+
+    // Buscar el hilo del mercader
+    const threadId = mercaderData?.thread_id;
+    let hilo = null;
+
+    if (threadId) {
+        hilo = await client.channels.fetch(threadId).catch(() => null);
+    }
+
+    if (!hilo) {
+        return interaction.reply({
+            content: '❌ No tienes un puesto activo. Pide a un admin que te asigne uno con `/dar_puesto`.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+
     const anuncioId = Date.now().toString();
     const anuncio = {
         id: anuncioId,
@@ -300,27 +322,23 @@ async function publicarAnuncio(interaction, client, datos) {
         vendido: false,
         fecha: new Date().toISOString(),
         mensaje_id: null,
-        canal_id: config.canales.mercado,
+        thread_id: hilo.id,
         ...datos
     };
 
-    const db = cargarDB();
     if (!db.mercado) db.mercado = {};
     db.mercado[anuncioId] = anuncio;
     guardarDB(db);
 
-    const canal = await client.channels.fetch(config.canales.mercado).catch(() => null);
-    if (!canal) return interaction.reply({ content: '❌ Canal de mercado no configurado.', flags: MessageFlags.Ephemeral });
-
     const embed = construirEmbedAnuncio(anuncio);
     const botones = construirBotonesAnuncio(anuncio);
-    const msg = await canal.send({ embeds: [embed], components: botones });
+    const msg = await hilo.send({ embeds: [embed], components: botones });
 
     db.mercado[anuncioId].mensaje_id = msg.id;
     guardarDB(db);
 
     await interaction.reply({
-        content: `✅ Anuncio publicado en <#${config.canales.mercado}>`,
+        content: `✅ Anuncio publicado en tu puesto <#${hilo.id}>`,
         flags: MessageFlags.Ephemeral
     });
 }
@@ -344,7 +362,7 @@ async function handleButton(interaction, client) {
         guardarDB(db);
 
         const embed = construirEmbedAnuncio(anuncio);
-        await interaction.update({ embeds: [embed], components: [] });
+        await interaction.update({ embeds: [embed], components: construirBotonesAnuncio(anuncio) });
         return;
     }
 
@@ -374,7 +392,7 @@ async function handleButton(interaction, client) {
     }
 }
 
-// --- GESTIÓN DE ROLES MERCADER ---
+// --- GESTIÓN DE ROLES Y HILOS MERCADER ---
 
 async function darRolMercader(interaction, client, usuario, numPuesto) {
     try {
@@ -384,14 +402,50 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
 
         if (!rol) return interaction.reply({ content: '❌ Rol Mercader no encontrado.', flags: MessageFlags.Ephemeral });
 
+        // Verificar si ya tiene puesto activo
+        const db = cargarDB();
+        if (db.mercaderes?.[usuario.id]?.thread_id) {
+            return interaction.reply({
+                content: `⚠️ **${usuario.username}** ya tiene un puesto activo. Quítaselo primero con \`/quitar_puesto\`.`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // Buscar el canal de mercado
+        const canal = await client.channels.fetch(config.canales.mercado).catch(() => null);
+        if (!canal) return interaction.reply({ content: '❌ Canal de mercado no configurado.', flags: MessageFlags.Ephemeral });
+
+        const nombrePuesto = numPuesto ? `Puesto ${numPuesto}` : 'Sin asignar';
+        const nombreHilo = `🏪 ${nombrePuesto} — ${usuario.username}`;
+
+        // Crear hilo en el canal de mercado
+        const hilo = await canal.threads.create({
+            name: nombreHilo,
+            type: ChannelType.PublicThread,
+            reason: `Puesto de mercado asignado a ${usuario.username}`
+        });
+
+        // Mensaje de apertura en el hilo
+        await hilo.send({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle(`🏪 ${nombrePuesto} — ${usuario.username}`)
+                    .setColor(0xE67E22)
+                    .setDescription(`Bienvenido al puesto de **${usuario.username}**.\nUsa \`/vender_dino\`, \`/vender_item\`, \`/vender_recurso\` o \`/vender_servicio\` para publicar tus anuncios aquí.`)
+                    .setFooter({ text: 'Usa los botones de cada anuncio para marcarlo como vendido o retirarlo.' })
+                    .setTimestamp()
+            ]
+        });
+
+        // Asignar rol
         await member.roles.add(rol);
 
-        // Guardar puesto asignado
-        const db = cargarDB();
+        // Guardar en DB
         if (!db.mercaderes) db.mercaderes = {};
         db.mercaderes[usuario.id] = {
             username: usuario.username,
-            puesto: numPuesto ? `Puesto ${numPuesto}` : 'Sin asignar',
+            puesto: nombrePuesto,
+            thread_id: hilo.id,
             fechaAsignacion: new Date().toISOString()
         };
         guardarDB(db);
@@ -403,13 +457,15 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
                     .setColor(0xE67E22)
                     .addFields(
                         { name: '👤 Mercader', value: usuario.username, inline: true },
-                        { name: '🏪 Puesto', value: numPuesto ? `Puesto ${numPuesto}` : 'Sin asignar', inline: true }
+                        { name: '🏪 Puesto', value: nombrePuesto, inline: true },
+                        { name: '📌 Hilo', value: `<#${hilo.id}>`, inline: true }
                     )
-                    .setDescription(`**${usuario.username}** puede publicar en el mercado con \`/vender\`.`)
+                    .setDescription(`**${usuario.username}** puede publicar en su puesto con \`/vender\`.`)
             ]
         });
 
     } catch (error) {
+        console.error('[MER] Error dando rol mercader:', error);
         await interaction.reply({ content: `❌ Error: ${error.message}`, flags: MessageFlags.Ephemeral });
     }
 }
@@ -422,25 +478,48 @@ async function quitarRolMercader(interaction, client, usuario) {
 
         if (!rol) return interaction.reply({ content: '❌ Rol Mercader no encontrado.', flags: MessageFlags.Ephemeral });
 
+        const db = cargarDB();
+        const mercaderData = db.mercaderes?.[usuario.id];
+
+        // Eliminar el hilo si existe
+        if (mercaderData?.thread_id) {
+            const hilo = await client.channels.fetch(mercaderData.thread_id).catch(() => null);
+            if (hilo) {
+                await hilo.delete(`Puesto retirado a ${usuario.username}`).catch(e => {
+                    console.warn('[MER] No se pudo eliminar el hilo:', e.message);
+                });
+            }
+        }
+
+        // Quitar rol
         await member.roles.remove(rol);
 
-        // Eliminar puesto
-        const db = cargarDB();
+        // Limpiar anuncios del mercader en DB
+        if (db.mercado) {
+            for (const [anuncioId, anuncio] of Object.entries(db.mercado)) {
+                if (anuncio.vendedorId === usuario.id) {
+                    delete db.mercado[anuncioId];
+                }
+            }
+        }
+
+        // Eliminar datos del mercader
         if (db.mercaderes?.[usuario.id]) {
             delete db.mercaderes[usuario.id];
-            guardarDB(db);
         }
+        guardarDB(db);
 
         await interaction.reply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('🛒 Puesto de mercado retirado')
-                    .setDescription(`**${usuario.username}** ya no tiene el rol de Mercader.`)
+                    .setDescription(`**${usuario.username}** ya no tiene rol de Mercader y su puesto ha sido eliminado.`)
                     .setColor(0x95A5A6)
             ]
         });
 
     } catch (error) {
+        console.error('[MER] Error quitando rol mercader:', error);
         await interaction.reply({ content: `❌ Error: ${error.message}`, flags: MessageFlags.Ephemeral });
     }
 }
