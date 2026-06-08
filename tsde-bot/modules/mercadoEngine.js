@@ -7,13 +7,15 @@ const {
     TextInputBuilder,
     TextInputStyle,
     MessageFlags,
-    ChannelType,
-    PermissionsBitField
+    ChannelType
 } = require('discord.js');
 const fs = require('fs');
 const config = require('../config.json');
 
 const DB_PATH = './database.json';
+
+// Tags del foro (se cachean al primer uso)
+let forumTags = null;
 
 function cargarDB() {
     return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
@@ -47,6 +49,45 @@ const EMOJIS_TIPO = {
     servicio: '🔧'
 };
 
+const NOMBRES_TAG = {
+    dino:     '🦖 Dino',
+    item:     '⚔️ Item',
+    recurso:  '🪵 Recurso',
+    servicio: '🔧 Servicio',
+    vendido:  '🔴 Vendido'
+};
+
+// --- OBTENER/CREAR TAGS DEL FORO ---
+
+async function obtenerTags(canal) {
+    if (forumTags) return forumTags;
+
+    const tagsExistentes = canal.availableTags || [];
+    const tagsNecesarios = Object.values(NOMBRES_TAG);
+    const tagsCrear = tagsNecesarios.filter(nombre =>
+        !tagsExistentes.some(t => t.name === nombre)
+    );
+
+    if (tagsCrear.length > 0) {
+        const nuevosTags = [
+            ...tagsExistentes,
+            ...tagsCrear.map(nombre => ({ name: nombre, moderated: false }))
+        ];
+        await canal.setAvailableTags(nuevosTags);
+        // Recargar
+        const canalActualizado = await canal.fetch();
+        forumTags = canalActualizado.availableTags;
+    } else {
+        forumTags = tagsExistentes;
+    }
+
+    return forumTags;
+}
+
+function buscarTag(tags, nombre) {
+    return tags.find(t => t.name === nombre)?.id || null;
+}
+
 // --- EMBED DE ANUNCIO ---
 
 function construirEmbedAnuncio(anuncio) {
@@ -57,18 +98,18 @@ function construirEmbedAnuncio(anuncio) {
         .setTitle(`${emoji} ${anuncio.nombre}`)
         .setColor(anuncio.vendido ? 0x95A5A6 : color)
         .addFields(
-            { name: '📦 Tipo', value: anuncio.tipo.charAt(0).toUpperCase() + anuncio.tipo.slice(1), inline: true },
+            { name: '📦 Tipo',     value: anuncio.tipo.charAt(0).toUpperCase() + anuncio.tipo.slice(1), inline: true },
             { name: '👤 Vendedor', value: anuncio.vendedor, inline: true },
-            { name: '🏪 Puesto', value: anuncio.puesto || 'Sin asignar', inline: true },
-            { name: '💰 Precio', value: anuncio.precio, inline: true }
+            { name: '🏪 Puesto',   value: anuncio.puesto || 'Sin asignar', inline: true },
+            { name: '💰 Precio',   value: anuncio.precio, inline: true }
         );
 
     if (anuncio.tipo === 'dino') {
-        if (anuncio.nivel)        embed.addFields({ name: '⭐ Nivel', value: anuncio.nivel, inline: true });
-        if (anuncio.estadisticas) embed.addFields({ name: '📊 Estadísticas', value: anuncio.estadisticas, inline: true });
-        if (anuncio.mutaciones)   embed.addFields({ name: '🧬 Mutaciones', value: anuncio.mutaciones, inline: true });
-        if (anuncio.sexo)         embed.addFields({ name: '⚥ Sexo', value: anuncio.sexo, inline: true });
-        if (anuncio.color)        embed.addFields({ name: '🎨 Color', value: anuncio.color, inline: true });
+        if (anuncio.nivel)        embed.addFields({ name: '⭐ Nivel',         value: anuncio.nivel,        inline: true });
+        if (anuncio.estadisticas) embed.addFields({ name: '📊 Estadísticas',  value: anuncio.estadisticas, inline: true });
+        if (anuncio.mutaciones)   embed.addFields({ name: '🧬 Mutaciones',    value: anuncio.mutaciones,   inline: true });
+        if (anuncio.sexo)         embed.addFields({ name: '⚥ Sexo',           value: anuncio.sexo,         inline: true });
+        if (anuncio.color)        embed.addFields({ name: '🎨 Color',         value: anuncio.color,        inline: true });
     }
 
     if (anuncio.tipo !== 'dino' && anuncio.estadisticas) {
@@ -93,7 +134,6 @@ function construirEmbedAnuncio(anuncio) {
 // --- BOTONES DE ANUNCIO ---
 
 function construirBotonesAnuncio(anuncio) {
-    // Botón de contacto disponible para todos
     const btnContactar = new ButtonBuilder()
         .setURL(`https://discord.com/users/${anuncio.vendedorId}`)
         .setLabel('📩 Contactar vendedor')
@@ -118,7 +158,7 @@ function construirBotonesAnuncio(anuncio) {
     ];
 }
 
-// --- MODAL VENDER DINO ---
+// --- MODALES ---
 
 async function mostrarModalVenderDino(interaction) {
     const db = cargarDB();
@@ -174,8 +214,6 @@ async function mostrarModalVenderDino(interaction) {
     await interaction.showModal(modal);
 }
 
-// --- MODAL VENDER ITEM/RECURSO/SERVICIO ---
-
 async function mostrarModalVenderItem(interaction, tipo) {
     const db = cargarDB();
     const puestoAsignado = db.mercaderes?.[interaction.user.id]?.puesto || 'Sin asignar';
@@ -229,34 +267,27 @@ async function handleModal(interaction, client) {
 
     if (id === 'mer_modal_dino') {
         try {
-            const nombre = interaction.fields.getTextInputValue('nombre').trim();
-            const nivel_stats = interaction.fields.getTextInputValue('nivel_stats').trim();
-            const mut_sexo_color = interaction.fields.getTextInputValue('mutaciones_sexo_color').trim();
-            const precio = interaction.fields.getTextInputValue('precio').trim();
-            const notas = interaction.fields.getTextInputValue('notas').trim();
+            const nombre          = interaction.fields.getTextInputValue('nombre').trim();
+            const nivel_stats     = interaction.fields.getTextInputValue('nivel_stats').trim();
+            const mut_sexo_color  = interaction.fields.getTextInputValue('mutaciones_sexo_color').trim();
+            const precio          = interaction.fields.getTextInputValue('precio').trim();
+            const notas           = interaction.fields.getTextInputValue('notas').trim();
 
-            const partes = nivel_stats.split('|').map(p => p.trim());
-            const nivel = partes[0] || nivel_stats;
+            const partes      = nivel_stats.split('|').map(p => p.trim());
+            const nivel       = partes[0] || nivel_stats;
             const estadisticas = partes.slice(1).join(' | ') || null;
 
-            const partesMSC = mut_sexo_color.split('|').map(p => p.trim());
+            const partesMSC  = mut_sexo_color.split('|').map(p => p.trim());
             const mutaciones = partesMSC[0] || null;
-            const sexo = partesMSC[1] || null;
-            const color = partesMSC[2] || null;
+            const sexo       = partesMSC[1] || null;
+            const color      = partesMSC[2] || null;
 
-            const db = cargarDB();
+            const db    = cargarDB();
             const puesto = db.mercaderes?.[interaction.user.id]?.puesto || 'Sin asignar';
 
             await publicarAnuncio(interaction, client, {
-                tipo: 'dino',
-                nombre,
-                nivel,
-                estadisticas,
-                mutaciones,
-                sexo,
-                color,
-                precio,
-                puesto,
+                tipo: 'dino', nombre, nivel, estadisticas,
+                mutaciones, sexo, color, precio, puesto,
                 notas: notas || null
             });
 
@@ -266,23 +297,21 @@ async function handleModal(interaction, client) {
         }
     }
 
-    if (id === 'mer_modal_item' || id === 'mer_modal_recurso' || id === 'mer_modal_servicio') {
+    if (['mer_modal_item', 'mer_modal_recurso', 'mer_modal_servicio'].includes(id)) {
         try {
-            const tipo = id.replace('mer_modal_', '');
-            const nombre = interaction.fields.getTextInputValue('nombre').trim();
+            const tipo             = id.replace('mer_modal_', '');
+            const nombre           = interaction.fields.getTextInputValue('nombre').trim();
             const cantidad_calidad = interaction.fields.getTextInputValue('cantidad_calidad').trim();
-            const precio = interaction.fields.getTextInputValue('precio').trim();
-            const notas = interaction.fields.getTextInputValue('notas').trim();
+            const precio           = interaction.fields.getTextInputValue('precio').trim();
+            const notas            = interaction.fields.getTextInputValue('notas').trim();
 
-            const db = cargarDB();
+            const db    = cargarDB();
             const puesto = db.mercaderes?.[interaction.user.id]?.puesto || 'Sin asignar';
 
             await publicarAnuncio(interaction, client, {
-                tipo,
-                nombre,
+                tipo, nombre,
                 estadisticas: cantidad_calidad,
-                precio,
-                puesto,
+                precio, puesto,
                 notas: notas || null
             });
 
@@ -293,26 +322,23 @@ async function handleModal(interaction, client) {
     }
 }
 
-// --- PUBLICAR ANUNCIO EN EL HILO DEL MERCADER ---
+// --- PUBLICAR ANUNCIO EN EL FORO ---
 
 async function publicarAnuncio(interaction, client, datos) {
+    const canal = await client.channels.fetch(config.canales.mercado).catch(() => null);
+    if (!canal || canal.type !== ChannelType.GuildForum) {
+        return interaction.reply({ content: '❌ Canal de mercado no es un foro o no está configurado.', flags: MessageFlags.Ephemeral });
+    }
+
     const db = cargarDB();
     const mercaderData = db.mercaderes?.[interaction.user.id];
-
-    // Buscar el hilo del mercader
-    const threadId = mercaderData?.thread_id;
-    let hilo = null;
-
-    if (threadId) {
-        hilo = await client.channels.fetch(threadId).catch(() => null);
+    if (!mercaderData) {
+        return interaction.reply({ content: '❌ No tienes un puesto activo. Pide a un admin que te asigne uno con `/dar_puesto`.', flags: MessageFlags.Ephemeral });
     }
 
-    if (!hilo) {
-        return interaction.reply({
-            content: '❌ No tienes un puesto activo. Pide a un admin que te asigne uno con `/dar_puesto`.',
-            flags: MessageFlags.Ephemeral
-        });
-    }
+    const tags = await obtenerTags(canal);
+    const tagTipo    = buscarTag(tags, NOMBRES_TAG[datos.tipo]);
+    const tagVendido = buscarTag(tags, NOMBRES_TAG.vendido);
 
     const anuncioId = Date.now().toString();
     const anuncio = {
@@ -321,8 +347,8 @@ async function publicarAnuncio(interaction, client, datos) {
         vendedorId: interaction.user.id,
         vendido: false,
         fecha: new Date().toISOString(),
-        mensaje_id: null,
-        thread_id: hilo.id,
+        post_id: null,
+        tag_vendido_id: tagVendido,
         ...datos
     };
 
@@ -330,15 +356,21 @@ async function publicarAnuncio(interaction, client, datos) {
     db.mercado[anuncioId] = anuncio;
     guardarDB(db);
 
-    const embed = construirEmbedAnuncio(anuncio);
+    const embed   = construirEmbedAnuncio(anuncio);
     const botones = construirBotonesAnuncio(anuncio);
-    const msg = await hilo.send({ embeds: [embed], components: botones });
 
-    db.mercado[anuncioId].mensaje_id = msg.id;
+    // Crear publicación en el foro
+    const post = await canal.threads.create({
+        name: `${EMOJIS_TIPO[datos.tipo] || '📦'} [${mercaderData.puesto}] ${datos.nombre} — ${interaction.user.username}`,
+        message: { embeds: [embed], components: botones },
+        appliedTags: tagTipo ? [tagTipo] : []
+    });
+
+    db.mercado[anuncioId].post_id = post.id;
     guardarDB(db);
 
     await interaction.reply({
-        content: `✅ Anuncio publicado en tu puesto <#${hilo.id}>`,
+        content: `✅ Anuncio publicado en <#${post.id}>`,
         flags: MessageFlags.Ephemeral
     });
 }
@@ -361,6 +393,15 @@ async function handleButton(interaction, client) {
         anuncio.vendido = true;
         guardarDB(db);
 
+        // Cambiar tag a 🔴 Vendido en la publicación del foro
+        if (anuncio.post_id && anuncio.tag_vendido_id) {
+            const post = await client.channels.fetch(anuncio.post_id).catch(() => null);
+            if (post) {
+                await post.setAppliedTags([anuncio.tag_vendido_id]).catch(() => {});
+                await post.setLocked(true).catch(() => {});
+            }
+        }
+
         const embed = construirEmbedAnuncio(anuncio);
         await interaction.update({ embeds: [embed], components: construirBotonesAnuncio(anuncio) });
         return;
@@ -376,76 +417,50 @@ async function handleButton(interaction, client) {
             return interaction.reply({ content: '⛔ Solo el vendedor puede retirar este anuncio.', flags: MessageFlags.Ephemeral });
         }
 
+        // Eliminar la publicación del foro
+        if (anuncio.post_id) {
+            const post = await client.channels.fetch(anuncio.post_id).catch(() => null);
+            if (post) await post.delete('Anuncio retirado por el vendedor').catch(() => {});
+        }
+
         delete db.mercado[anuncioId];
         guardarDB(db);
 
-        await interaction.update({
-            embeds: [
-                new EmbedBuilder()
-                    .setTitle('🗑️ Anuncio retirado')
-                    .setDescription('Este anuncio ha sido retirado por el vendedor.')
-                    .setColor(0x95A5A6)
-            ],
-            components: []
-        });
+        // El mensaje ya no existe (se borró el post), solo reply
+        await interaction.reply({
+            content: '🗑️ Anuncio retirado correctamente.',
+            flags: MessageFlags.Ephemeral
+        }).catch(() => {});
         return;
     }
 }
 
-// --- GESTIÓN DE ROLES Y HILOS MERCADER ---
+// --- DAR PUESTO (sin hilo, solo rol + DB) ---
 
 async function darRolMercader(interaction, client, usuario, numPuesto) {
     try {
-        const guild = interaction.guild;
+        const guild  = interaction.guild;
         const member = await guild.members.fetch(usuario.id);
-        const rol = guild.roles.cache.find(r => r.id === config.roles.mercader || r.name === 'Mercader');
+        const rol    = guild.roles.cache.find(r => r.id === config.roles.mercader || r.name === 'Mercader');
 
         if (!rol) return interaction.reply({ content: '❌ Rol Mercader no encontrado.', flags: MessageFlags.Ephemeral });
 
-        // Verificar si ya tiene puesto activo
         const db = cargarDB();
-        if (db.mercaderes?.[usuario.id]?.thread_id) {
+        if (db.mercaderes?.[usuario.id]) {
             return interaction.reply({
                 content: `⚠️ **${usuario.username}** ya tiene un puesto activo. Quítaselo primero con \`/quitar_puesto\`.`,
                 flags: MessageFlags.Ephemeral
             });
         }
 
-        // Buscar el canal de mercado
-        const canal = await client.channels.fetch(config.canales.mercado).catch(() => null);
-        if (!canal) return interaction.reply({ content: '❌ Canal de mercado no configurado.', flags: MessageFlags.Ephemeral });
-
         const nombrePuesto = numPuesto ? `Puesto ${numPuesto}` : 'Sin asignar';
-        const nombreHilo = `🏪 ${nombrePuesto} — ${usuario.username}`;
 
-        // Crear hilo en el canal de mercado
-        const hilo = await canal.threads.create({
-            name: nombreHilo,
-            type: ChannelType.PublicThread,
-            reason: `Puesto de mercado asignado a ${usuario.username}`
-        });
-
-        // Mensaje de apertura en el hilo
-        await hilo.send({
-            embeds: [
-                new EmbedBuilder()
-                    .setTitle(`🏪 ${nombrePuesto} — ${usuario.username}`)
-                    .setColor(0xE67E22)
-                    .setDescription(`Bienvenido al puesto de **${usuario.username}**.\nUsa \`/vender_dino\`, \`/vender_item\`, \`/vender_recurso\` o \`/vender_servicio\` para publicar tus anuncios aquí.`)
-                    .setFooter({ text: 'Usa los botones de cada anuncio para marcarlo como vendido o retirarlo.' })
-                    .setTimestamp()
-            ]
-        });
-
-        // Asignar rol
         await member.roles.add(rol);
 
-        // Guardar en DB
         if (!db.mercaderes) db.mercaderes = {};
         db.mercaderes[usuario.id] = {
             username: usuario.username,
             puesto: nombrePuesto,
-            thread_id: hilo.id,
             fechaAsignacion: new Date().toISOString()
         };
         guardarDB(db);
@@ -457,10 +472,9 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
                     .setColor(0xE67E22)
                     .addFields(
                         { name: '👤 Mercader', value: usuario.username, inline: true },
-                        { name: '🏪 Puesto', value: nombrePuesto, inline: true },
-                        { name: '📌 Hilo', value: `<#${hilo.id}>`, inline: true }
+                        { name: '🏪 Puesto',   value: nombrePuesto,     inline: true }
                     )
-                    .setDescription(`**${usuario.username}** puede publicar en su puesto con \`/vender\`.`)
+                    .setDescription(`**${usuario.username}** puede publicar en el mercado con \`/vender_dino\`, \`/vender_item\`, \`/vender_recurso\` o \`/vender_servicio\`.`)
             ]
         });
 
@@ -470,50 +484,40 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
     }
 }
 
+// --- QUITAR PUESTO ---
+
 async function quitarRolMercader(interaction, client, usuario) {
     try {
-        const guild = interaction.guild;
+        const guild  = interaction.guild;
         const member = await guild.members.fetch(usuario.id);
-        const rol = guild.roles.cache.find(r => r.id === config.roles.mercader || r.name === 'Mercader');
+        const rol    = guild.roles.cache.find(r => r.id === config.roles.mercader || r.name === 'Mercader');
 
         if (!rol) return interaction.reply({ content: '❌ Rol Mercader no encontrado.', flags: MessageFlags.Ephemeral });
 
         const db = cargarDB();
-        const mercaderData = db.mercaderes?.[usuario.id];
 
-        // Eliminar el hilo si existe
-        if (mercaderData?.thread_id) {
-            const hilo = await client.channels.fetch(mercaderData.thread_id).catch(() => null);
-            if (hilo) {
-                await hilo.delete(`Puesto retirado a ${usuario.username}`).catch(e => {
-                    console.warn('[MER] No se pudo eliminar el hilo:', e.message);
-                });
-            }
-        }
-
-        // Quitar rol
-        await member.roles.remove(rol);
-
-        // Limpiar anuncios del mercader en DB
+        // Eliminar todas las publicaciones del foro de este mercader
         if (db.mercado) {
+            const canal = await client.channels.fetch(config.canales.mercado).catch(() => null);
             for (const [anuncioId, anuncio] of Object.entries(db.mercado)) {
-                if (anuncio.vendedorId === usuario.id) {
+                if (anuncio.vendedorId === usuario.id && anuncio.post_id) {
+                    const post = await client.channels.fetch(anuncio.post_id).catch(() => null);
+                    if (post) await post.delete(`Puesto retirado a ${usuario.username}`).catch(() => {});
                     delete db.mercado[anuncioId];
                 }
             }
         }
 
-        // Eliminar datos del mercader
-        if (db.mercaderes?.[usuario.id]) {
-            delete db.mercaderes[usuario.id];
-        }
+        await member.roles.remove(rol);
+
+        if (db.mercaderes?.[usuario.id]) delete db.mercaderes[usuario.id];
         guardarDB(db);
 
         await interaction.reply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('🛒 Puesto de mercado retirado')
-                    .setDescription(`**${usuario.username}** ya no tiene rol de Mercader y su puesto ha sido eliminado.`)
+                    .setDescription(`**${usuario.username}** ya no tiene rol de Mercader y sus anuncios han sido eliminados.`)
                     .setColor(0x95A5A6)
             ]
         });
@@ -524,6 +528,62 @@ async function quitarRolMercader(interaction, client, usuario) {
     }
 }
 
+// --- SETUP: PUBLICACIÓN FIJADA DE BIENVENIDA ---
+
+async function setupMercado(interaction, client) {
+    if (!interaction.member.permissions.has('Administrator')) {
+        return interaction.reply({ content: '⛔ Solo administradores.', flags: MessageFlags.Ephemeral });
+    }
+
+    const canal = await client.channels.fetch(config.canales.mercado).catch(() => null);
+    if (!canal || canal.type !== ChannelType.GuildForum) {
+        return interaction.reply({ content: '❌ Canal de mercado no es un foro.', flags: MessageFlags.Ephemeral });
+    }
+
+    // Asegurar que los tags existen
+    const tags = await obtenerTags(canal);
+
+    const embed = new EmbedBuilder()
+        .setTitle('🏪 Bienvenido al Mercado TSDE')
+        .setColor(0xE67E22)
+        .setDescription(
+            '¡Bienvenido al mercado oficial del servidor **TSDE Arkeanos**!\n\n' +
+            'Aquí los mercaderes con puesto asignado pueden publicar sus ventas e intercambios.\n\n' +
+            '**📍 Ubicación del mercado en el mapa:** `57.8 / 34.7`\n\n' +
+            '**📋 Cómo funciona:**\n' +
+            '> 1. Un admin te asigna un puesto con `/dar_puesto`\n' +
+            '> 2. Recibes el rol **Mercader** y puedes publicar anuncios\n' +
+            '> 3. Usa los comandos de venta para crear publicaciones aquí\n' +
+            '> 4. Marca tus anuncios como vendidos cuando se cierren\n\n' +
+            '**🛒 Comandos disponibles (solo Mercaderes):**\n' +
+            '`/vender_dino` — Publica un dinosaurio en venta\n' +
+            '`/vender_item` — Publica un ítem o equipamiento\n' +
+            '`/vender_recurso` — Publica materiales o recursos\n' +
+            '`/vender_servicio` — Ofrece un servicio (cría, tames, etc.)\n\n' +
+            '**🏷️ Tags:**\n' +
+            '🦖 Dino · ⚔️ Item · 🪵 Recurso · 🔧 Servicio · 🔴 Vendido\n\n' +
+            '**📩 ¿Quieres comprar algo?** Usa el botón **Contactar vendedor** en cada anuncio para hablar por privado.'
+        )
+        .setFooter({ text: 'TSDE Arkeanos — Ragnarok · Solo lectura para compradores' })
+        .setTimestamp();
+
+    const post = await canal.threads.create({
+        name: '📌 Cómo funciona el Mercado TSDE',
+        message: { embeds: [embed] },
+        appliedTags: []
+    });
+
+    // Fijar el post (pinear el mensaje de apertura)
+    const mensajes = await post.messages.fetch({ limit: 1 });
+    const primerMensaje = mensajes.first();
+    if (primerMensaje) await primerMensaje.pin().catch(() => {});
+
+    await interaction.reply({
+        content: `✅ Publicación de bienvenida creada: <#${post.id}>`,
+        flags: MessageFlags.Ephemeral
+    });
+}
+
 module.exports = {
     mostrarModalVenderDino,
     mostrarModalVenderItem,
@@ -531,5 +591,6 @@ module.exports = {
     handleButton,
     darRolMercader,
     quitarRolMercader,
-    esMercader
+    esMercader,
+    setupMercado
 };
