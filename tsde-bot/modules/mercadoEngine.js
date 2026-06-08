@@ -308,20 +308,21 @@ async function handleModal(interaction, client) {
 // --- PUBLICAR ANUNCIO EN EL FORO ---
 
 async function publicarAnuncio(interaction, client, datos) {
-    const canal = await client.channels.fetch(config.canales.mercado).catch(() => null);
-    if (!canal || canal.type !== ChannelType.GuildForum) {
-        return interaction.reply({ content: '❌ Canal de mercado no es un foro o no está configurado.', flags: MessageFlags.Ephemeral });
-    }
-
     const db = cargarDB();
     const mercaderData = db.mercaderes?.[interaction.user.id];
     if (!mercaderData) {
         return interaction.reply({ content: '❌ No tienes un puesto activo. Pide a un admin que te asigne uno con `/dar_puesto`.', flags: MessageFlags.Ephemeral });
     }
 
-    const tags = await obtenerTags(canal);
-    const tagTipo    = buscarTag(tags, NOMBRES_TAG[datos.tipo]);
-    const tagVendido = buscarTag(tags, NOMBRES_TAG.vendido);
+    const puestoPostId = mercaderData.puesto_post_id;
+    if (!puestoPostId) {
+        return interaction.reply({ content: '❌ Tu puesto no tiene hilo asignado. Contacta con un admin.', flags: MessageFlags.Ephemeral });
+    }
+
+    const hilo = await client.channels.fetch(puestoPostId).catch(() => null);
+    if (!hilo) {
+        return interaction.reply({ content: '❌ No se encontró el hilo de tu puesto. Contacta con un admin.', flags: MessageFlags.Ephemeral });
+    }
 
     const anuncioId = Date.now().toString();
     const anuncio = {
@@ -330,8 +331,8 @@ async function publicarAnuncio(interaction, client, datos) {
         vendedorId: interaction.user.id,
         vendido: false,
         fecha: new Date().toISOString(),
-        post_id: null,
-        tag_vendido_id: tagVendido,
+        mensaje_id: null,
+        thread_id: puestoPostId,
         ...datos
     };
 
@@ -342,18 +343,13 @@ async function publicarAnuncio(interaction, client, datos) {
     const embed   = construirEmbedAnuncio(anuncio);
     const botones = construirBotonesAnuncio(anuncio);
 
-    // Crear publicación en el foro
-    const post = await canal.threads.create({
-        name: `${EMOJIS_TIPO[datos.tipo] || '📦'} [${mercaderData.puesto}] ${datos.nombre} — ${interaction.member.displayName}`,
-        message: { embeds: [embed], components: botones },
-        appliedTags: tagTipo ? [tagTipo] : []
-    });
+    const msg = await hilo.send({ embeds: [embed], components: botones });
 
-    db.mercado[anuncioId].post_id = post.id;
+    db.mercado[anuncioId].mensaje_id = msg.id;
     guardarDB(db);
 
     await interaction.reply({
-        content: `✅ Anuncio publicado en <#${post.id}>`,
+        content: `✅ Anuncio publicado en tu puesto <#${puestoPostId}>`,
         flags: MessageFlags.Ephemeral
     });
 }
@@ -376,15 +372,6 @@ async function handleButton(interaction, client) {
         anuncio.vendido = true;
         guardarDB(db);
 
-        // Cambiar tag a 🔴 Vendido en la publicación del foro
-        if (anuncio.post_id && anuncio.tag_vendido_id) {
-            const post = await client.channels.fetch(anuncio.post_id).catch(() => null);
-            if (post) {
-                await post.setAppliedTags([anuncio.tag_vendido_id]).catch(() => {});
-                await post.setLocked(true).catch(() => {});
-            }
-        }
-
         const embed = construirEmbedAnuncio(anuncio);
         await interaction.update({ embeds: [embed], components: construirBotonesAnuncio(anuncio) });
         return;
@@ -400,20 +387,18 @@ async function handleButton(interaction, client) {
             return interaction.reply({ content: '⛔ Solo el vendedor puede retirar este anuncio.', flags: MessageFlags.Ephemeral });
         }
 
-        // Eliminar la publicación del foro
-        if (anuncio.post_id) {
-            const post = await client.channels.fetch(anuncio.post_id).catch(() => null);
-            if (post) await post.delete('Anuncio retirado por el vendedor').catch(() => {});
-        }
-
         delete db.mercado[anuncioId];
         guardarDB(db);
 
-        // El mensaje ya no existe (se borró el post), solo reply
-        await interaction.reply({
-            content: '🗑️ Anuncio retirado correctamente.',
-            flags: MessageFlags.Ephemeral
-        }).catch(() => {});
+        await interaction.update({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('🗑️ Anuncio retirado')
+                    .setDescription('Este anuncio ha sido retirado por el vendedor.')
+                    .setColor(0x95A5A6)
+            ],
+            components: []
+        });
         return;
     }
 }
@@ -423,8 +408,13 @@ async function handleButton(interaction, client) {
 async function darRolMercader(interaction, client, usuario, numPuesto) {
     try {
         const guild  = interaction.guild;
-        const member = await guild.members.fetch(usuario.id);
-        const displayName = member.displayName;
+        const member = await guild.members.fetch({ user: usuario.id, force: true });
+        // Prioridad: apodo del servidor (nombre en juego) > nombre global de Discord
+        const db2 = cargarDB();
+        const displayName = member.nickname
+            || db2.jugadores?.[usuario.id]?.nombreJuego
+            || member.user.globalName
+            || member.user.username;
         const rol    = guild.roles.cache.find(r => r.id === config.roles.mercader || r.name === 'Mercader');
 
         if (!rol) return interaction.reply({ content: '❌ Rol Mercader no encontrado.', flags: MessageFlags.Ephemeral });
@@ -519,9 +509,14 @@ async function quitarRolMercader(interaction, client, usuario) {
         // Eliminar todas las publicaciones de anuncios del foro de este mercader
         if (db.mercado) {
             for (const [anuncioId, anuncio] of Object.entries(db.mercado)) {
-                if (anuncio.vendedorId === usuario.id && anuncio.post_id) {
-                    const post = await client.channels.fetch(anuncio.post_id).catch(() => null);
-                    if (post) await post.delete(`Puesto retirado a ${usuario.username}`).catch(() => {});
+                if (anuncio.vendedorId === usuario.id) {
+                    if (anuncio.thread_id && anuncio.mensaje_id) {
+                        const hilo = await client.channels.fetch(anuncio.thread_id).catch(() => null);
+                        if (hilo) {
+                            const msg = await hilo.messages.fetch(anuncio.mensaje_id).catch(() => null);
+                            if (msg) await msg.delete().catch(() => {});
+                        }
+                    }
                     delete db.mercado[anuncioId];
                 }
             }
