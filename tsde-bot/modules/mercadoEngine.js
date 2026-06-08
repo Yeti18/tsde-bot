@@ -326,7 +326,7 @@ async function publicarAnuncio(interaction, client, datos) {
     const anuncioId = Date.now().toString();
     const anuncio = {
         id: anuncioId,
-        vendedor: interaction.user.username,
+        vendedor: interaction.member.displayName,
         vendedorId: interaction.user.id,
         vendido: false,
         fecha: new Date().toISOString(),
@@ -344,7 +344,7 @@ async function publicarAnuncio(interaction, client, datos) {
 
     // Crear publicación en el foro
     const post = await canal.threads.create({
-        name: `${EMOJIS_TIPO[datos.tipo] || '📦'} [${mercaderData.puesto}] ${datos.nombre} — ${interaction.user.username}`,
+        name: `${EMOJIS_TIPO[datos.tipo] || '📦'} [${mercaderData.puesto}] ${datos.nombre} — ${interaction.member.displayName}`,
         message: { embeds: [embed], components: botones },
         appliedTags: tagTipo ? [tagTipo] : []
     });
@@ -424,6 +424,7 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
     try {
         const guild  = interaction.guild;
         const member = await guild.members.fetch(usuario.id);
+        const displayName = member.displayName;
         const rol    = guild.roles.cache.find(r => r.id === config.roles.mercader || r.name === 'Mercader');
 
         if (!rol) return interaction.reply({ content: '❌ Rol Mercader no encontrado.', flags: MessageFlags.Ephemeral });
@@ -431,7 +432,7 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
         const db = cargarDB();
         if (db.mercaderes?.[usuario.id]) {
             return interaction.reply({
-                content: `⚠️ **${usuario.username}** ya tiene un puesto activo. Quítaselo primero con \`/quitar_puesto\`.`,
+                content: `⚠️ **${displayName}** ya tiene un puesto activo. Quítaselo primero con \`/quitar_puesto\`.`,
                 flags: MessageFlags.Ephemeral
             });
         }
@@ -444,10 +445,10 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
 
         if (canal && canal.type === ChannelType.GuildForum) {
             const embedPuesto = new EmbedBuilder()
-                .setTitle(`🏪 ${nombrePuesto} — ${usuario.username}`)
+                .setTitle(`🏪 ${nombrePuesto} — ${displayName}`)
                 .setColor(0xE67E22)
                 .setDescription(
-                    `Bienvenido al puesto de **${usuario.username}**.\n\n` +
+                    `Bienvenido al puesto de **${displayName}**.\n\n` +
                     `Usa \`/vender_dino\`, \`/vender_item\`, \`/vender_recurso\` o \`/vender_servicio\` para publicar tus anuncios.\n\n` +
                     `📩 Para contactar pulsa el botón de cada anuncio.`
                 )
@@ -456,7 +457,7 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
                 .setTimestamp();
 
             const post = await canal.threads.create({
-                name: `🏪 ${nombrePuesto} — ${usuario.username}`,
+                name: `🏪 ${nombrePuesto} — ${displayName}`,
                 message: { embeds: [embedPuesto] },
                 appliedTags: []
             });
@@ -467,7 +468,7 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
 
         if (!db.mercaderes) db.mercaderes = {};
         db.mercaderes[usuario.id] = {
-            username: usuario.username,
+            username: displayName,
             puesto: nombrePuesto,
             puesto_post_id: puestoPostId,
             fechaAsignacion: new Date().toISOString()
@@ -475,7 +476,7 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
         guardarDB(db);
 
         const replyFields = [
-            { name: '👤 Mercader', value: usuario.username, inline: true },
+            { name: '👤 Mercader', value: displayName, inline: true },
             { name: '🏪 Puesto',   value: nombrePuesto,     inline: true }
         ];
         if (puestoPostId) replyFields.push({ name: '📌 Publicación', value: `<#${puestoPostId}>`, inline: true });
@@ -486,7 +487,7 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
                     .setTitle('🛒 Puesto de mercado asignado')
                     .setColor(0xE67E22)
                     .addFields(...replyFields)
-                    .setDescription(`**${usuario.username}** puede publicar en el mercado con \`/vender_dino\`, \`/vender_item\`, \`/vender_recurso\` o \`/vender_servicio\`.`)
+                    .setDescription(`**${displayName}** puede publicar en el mercado con \`/vender_dino\`, \`/vender_item\`, \`/vender_recurso\` o \`/vender_servicio\`.`)
             ]
         });
 
