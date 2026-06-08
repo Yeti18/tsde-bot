@@ -1,5 +1,6 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const mercadoEngine = require('../../modules/mercadoEngine.js');
+const fs = require('fs');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -33,6 +34,10 @@ module.exports = {
         .addSubcommand(sub =>
             sub.setName('ver-puestos')
                 .setDescription('Ver todos los puestos asignados actualmente')
+        )
+        .addSubcommand(sub =>
+            sub.setName('setup')
+                .setDescription('Crear la publicación de bienvenida fijada en el foro del mercado [solo una vez]')
         ),
 
     async execute(interaction, client) {
@@ -44,7 +49,7 @@ module.exports = {
 
         if (sub === 'dar-puesto') {
             const usuario = interaction.options.getUser('jugador');
-            const numero = interaction.options.getInteger('numero');
+            const numero  = interaction.options.getInteger('numero');
             await mercadoEngine.darRolMercader(interaction, client, usuario, numero);
         }
 
@@ -54,7 +59,6 @@ module.exports = {
         }
 
         if (sub === 'ver-puestos') {
-            const fs = require('fs');
             const db = JSON.parse(fs.readFileSync('./database.json', 'utf8'));
             const mercaderes = db.mercaderes || {};
             const lista = Object.values(mercaderes);
@@ -63,16 +67,17 @@ module.exports = {
                 return interaction.reply({ content: '📋 No hay mercaderes activos actualmente.', ephemeral: true });
             }
 
-            const { EmbedBuilder } = require('discord.js');
             const embed = new EmbedBuilder()
                 .setTitle('🛒 Puestos del Mercado TSDE')
                 .setColor(0xE67E22)
-                .setDescription(
-                    lista.map(m => `**${m.puesto}** — ${m.username}`).join('\n')
-                )
+                .setDescription(lista.map(m => `**${m.puesto}** — ${m.username}`).join('\n'))
                 .setFooter({ text: `${lista.length} puestos ocupados` });
 
             await interaction.reply({ embeds: [embed], ephemeral: true });
+        }
+
+        if (sub === 'setup') {
+            await mercadoEngine.setupMercado(interaction, client);
         }
     }
 };
