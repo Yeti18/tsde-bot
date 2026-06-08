@@ -61,26 +61,9 @@ const NOMBRES_TAG = {
 
 async function obtenerTags(canal) {
     if (forumTags) return forumTags;
-
-    const tagsExistentes = canal.availableTags || [];
-    const tagsNecesarios = Object.values(NOMBRES_TAG);
-    const tagsCrear = tagsNecesarios.filter(nombre =>
-        !tagsExistentes.some(t => t.name === nombre)
-    );
-
-    if (tagsCrear.length > 0) {
-        const nuevosTags = [
-            ...tagsExistentes,
-            ...tagsCrear.map(nombre => ({ name: nombre, moderated: false }))
-        ];
-        await canal.setAvailableTags(nuevosTags);
-        // Recargar
-        const canalActualizado = await canal.fetch();
-        forumTags = canalActualizado.availableTags;
-    } else {
-        forumTags = tagsExistentes;
-    }
-
+    // Siempre recargar desde Discord para tener los tags actualizados
+    const canalFresh = await canal.fetch();
+    forumTags = canalFresh.availableTags || [];
     return forumTags;
 }
 
