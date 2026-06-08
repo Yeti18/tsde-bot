@@ -438,25 +438,54 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
 
         const nombrePuesto = numPuesto ? `Puesto ${numPuesto}` : 'Sin asignar';
 
+        // Crear publicación de presentación del puesto en el foro
+        const canal = await client.channels.fetch(config.canales.mercado).catch(() => null);
+        let puestoPostId = null;
+
+        if (canal && canal.type === ChannelType.GuildForum) {
+            const embedPuesto = new EmbedBuilder()
+                .setTitle(`🏪 ${nombrePuesto} — ${usuario.username}`)
+                .setColor(0xE67E22)
+                .setDescription(
+                    `Bienvenido al puesto de **${usuario.username}**.\n\n` +
+                    `Usa \`/vender_dino\`, \`/vender_item\`, \`/vender_recurso\` o \`/vender_servicio\` para publicar tus anuncios.\n\n` +
+                    `📩 Para contactar pulsa el botón de cada anuncio.`
+                )
+                .addFields({ name: '🏪 Puesto asignado', value: nombrePuesto, inline: true })
+                .setFooter({ text: 'TSDE Arkeanos — Mercado' })
+                .setTimestamp();
+
+            const post = await canal.threads.create({
+                name: `🏪 ${nombrePuesto} — ${usuario.username}`,
+                message: { embeds: [embedPuesto] },
+                appliedTags: []
+            });
+            puestoPostId = post.id;
+        }
+
         await member.roles.add(rol);
 
         if (!db.mercaderes) db.mercaderes = {};
         db.mercaderes[usuario.id] = {
             username: usuario.username,
             puesto: nombrePuesto,
+            puesto_post_id: puestoPostId,
             fechaAsignacion: new Date().toISOString()
         };
         guardarDB(db);
+
+        const replyFields = [
+            { name: '👤 Mercader', value: usuario.username, inline: true },
+            { name: '🏪 Puesto',   value: nombrePuesto,     inline: true }
+        ];
+        if (puestoPostId) replyFields.push({ name: '📌 Publicación', value: `<#${puestoPostId}>`, inline: true });
 
         await interaction.reply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle('🛒 Puesto de mercado asignado')
                     .setColor(0xE67E22)
-                    .addFields(
-                        { name: '👤 Mercader', value: usuario.username, inline: true },
-                        { name: '🏪 Puesto',   value: nombrePuesto,     inline: true }
-                    )
+                    .addFields(...replyFields)
                     .setDescription(`**${usuario.username}** puede publicar en el mercado con \`/vender_dino\`, \`/vender_item\`, \`/vender_recurso\` o \`/vender_servicio\`.`)
             ]
         });
@@ -479,9 +508,15 @@ async function quitarRolMercader(interaction, client, usuario) {
 
         const db = cargarDB();
 
-        // Eliminar todas las publicaciones del foro de este mercader
+        // Eliminar publicación de presentación del puesto
+        const puestoPostId = db.mercaderes?.[usuario.id]?.puesto_post_id;
+        if (puestoPostId) {
+            const puestoPost = await client.channels.fetch(puestoPostId).catch(() => null);
+            if (puestoPost) await puestoPost.delete(`Puesto retirado a ${usuario.username}`).catch(() => {});
+        }
+
+        // Eliminar todas las publicaciones de anuncios del foro de este mercader
         if (db.mercado) {
-            const canal = await client.channels.fetch(config.canales.mercado).catch(() => null);
             for (const [anuncioId, anuncio] of Object.entries(db.mercado)) {
                 if (anuncio.vendedorId === usuario.id && anuncio.post_id) {
                     const post = await client.channels.fetch(anuncio.post_id).catch(() => null);
