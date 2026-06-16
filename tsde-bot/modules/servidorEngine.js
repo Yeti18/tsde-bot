@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { Rcon } = require('rcon-client');
+const Rcon = require('rcon');
 const config = require('../config.json');
 
 let mensajeEstadoId = null;
