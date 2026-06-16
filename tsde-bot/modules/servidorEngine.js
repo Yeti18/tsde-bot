@@ -1,19 +1,25 @@
 const { EmbedBuilder } = require('discord.js');
-const Rcon = require('rcon');
+const { Rcon } = require('rcon-client');
 const config = require('../config.json');
 
 let mensajeEstadoId = null;
 let mensajeJugadoresId = null;
 let intervalo = null;
-let servidorCaidoAvisado = false;
 
-// Datos del servidor desde config
+// Estado de caída — para diferenciar reinicio normal de caída real
+let cayendoDesde = null; // timestamp de cuando empezó a fallar
+let avisoEnviado = false;
+let nombreCanalActual = null; // para no spamear el rename
+
 const SERVIDOR = config.servidor || {
     nombre: 'TSDE Arkeanos',
     mapa: 'Ragnarok',
     maxJugadores: 70,
     region: 'EU'
 };
+
+// Minutos que tiene que estar caído para considerarse "caída real" y no reinicio normal
+const MINUTOS_REINICIO_NORMAL = 8;
 
 // --- RCON ---
 
@@ -60,10 +66,8 @@ async function consultarServidor() {
 
 function parsearJugadores(respuesta) {
     if (!respuesta) return [];
-
     const textoLimpio = respuesta.trim();
 
-    // ARK ASA devuelve esto cuando no hay jugadores
     if (
         textoLimpio === '' ||
         textoLimpio.toLowerCase().includes('no players') ||
@@ -79,14 +83,12 @@ function parsearJugadores(respuesta) {
         const limpia = linea.trim();
         if (!limpia) continue;
 
-        // Formato ARK: "0. NombreJugador, SteamID64"
         const match = limpia.match(/^\d+\.\s+(.+?),\s*\d+/);
         if (match) {
             jugadores.push(match[1].trim());
             continue;
         }
 
-        // Formato alternativo sin SteamID
         const match2 = limpia.match(/^\d+\.\s+(.+)$/);
         if (match2) {
             const nombre = match2[1].replace(/,.*$/, '').trim();
@@ -99,7 +101,7 @@ function parsearJugadores(respuesta) {
 
 // --- EMBEDS ---
 
-function construirEmbedEstado(info) {
+function construirEmbedEstado(info, minutosCaido) {
     const hora = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
     if (info.online) {
@@ -115,10 +117,22 @@ function construirEmbedEstado(info) {
             .setTimestamp();
     }
 
+    // Caído — diferenciar reinicio normal de caída real
+    if (minutosCaido !== null && minutosCaido < MINUTOS_REINICIO_NORMAL) {
+        return new EmbedBuilder()
+            .setTitle(`🟡 ${SERVIDOR.nombre} — REINICIANDO`)
+            .setColor(0xF39C12)
+            .setDescription(`El servidor está en su reinicio diario programado.\nVuelve a estar disponible en pocos minutos.`)
+            .addFields({ name: '⏱️ Caído desde', value: `${minutosCaido} minuto(s)`, inline: true })
+            .setFooter({ text: `Última comprobación: ${hora}` })
+            .setTimestamp();
+    }
+
     return new EmbedBuilder()
         .setTitle(`🔴 ${SERVIDOR.nombre} — FUERA DE LÍNEA`)
         .setColor(0xE74C3C)
-        .setDescription('El servidor está caído o en mantenimiento.\nConsulta #anuncios para más información.')
+        .setDescription('El servidor no responde desde hace tiempo.\nConsulta #anuncios para más información.')
+        .addFields({ name: '⏱️ Caído desde', value: minutosCaido !== null ? `${minutosCaido} minuto(s)` : 'Desconocido', inline: true })
         .setFooter({ text: `Última comprobación: ${hora}` })
         .setTimestamp();
 }
@@ -153,7 +167,7 @@ function construirEmbedJugadores(info) {
     return embed;
 }
 
-// --- ACTUALIZAR MENSAJE EN CANAL ---
+// --- ACTUALIZAR MENSAJE ---
 
 async function actualizarMensaje(client, canalId, mensajeIdRef, embed) {
     const canal = await client.channels.fetch(canalId);
@@ -162,13 +176,12 @@ async function actualizarMensaje(client, canalId, mensajeIdRef, embed) {
         try {
             const msg = await canal.messages.fetch(mensajeIdRef.id);
             await msg.edit({ embeds: [embed] });
-            return;
+            return canal;
         } catch {
             mensajeIdRef.id = null;
         }
     }
 
-    // Buscar mensaje existente del bot
     const mensajes = await canal.messages.fetch({ limit: 10 });
     const existente = mensajes.find(m => m.author.id === client.user.id);
     if (existente) {
@@ -177,6 +190,26 @@ async function actualizarMensaje(client, canalId, mensajeIdRef, embed) {
     } else {
         const msg = await canal.send({ embeds: [embed] });
         mensajeIdRef.id = msg.id;
+    }
+    return canal;
+}
+
+// --- CAMBIAR NOMBRE DEL CANAL (con límite de Discord respetado) ---
+
+async function actualizarNombreCanal(canal, online) {
+    const nombreBase = canal.name.replace(/^[🟢🔴🟡]/, '').replace(/^[\s|_-]+/, '');
+    const emoji = online ? '🟢' : '🔴';
+    const nuevoNombre = `${emoji}${nombreBase}`;
+
+    // Solo cambiar si realmente cambió el estado — evita rate limit de Discord (2 cambios/10min)
+    if (nombreCanalActual === online) return;
+
+    try {
+        await canal.setName(nuevoNombre);
+        nombreCanalActual = online;
+        console.log(`[SRV] Nombre de canal actualizado: ${nuevoNombre}`);
+    } catch (e) {
+        console.error('[SRV] No se pudo cambiar nombre del canal (límite de Discord):', e.message);
     }
 }
 
@@ -187,12 +220,26 @@ const refJugadores = { id: null };
 
 async function actualizarCanales(client) {
     const info = await consultarServidor();
-    console.log(`[SRV] Online: ${info.online} | Jugadores: ${JSON.stringify(info.jugadores)}`);
+
+    let minutosCaido = null;
+
+    if (!info.online) {
+        if (cayendoDesde === null) {
+            cayendoDesde = Date.now();
+        }
+        minutosCaido = Math.floor((Date.now() - cayendoDesde) / 60000);
+    } else {
+        cayendoDesde = null;
+        minutosCaido = null;
+    }
+
+    console.log(`[SRV] Online: ${info.online} | Jugadores: ${JSON.stringify(info.jugadores)} | Minutos caído: ${minutosCaido}`);
 
     // Estado servidor
     if (config.canales.estado) {
         try {
-            await actualizarMensaje(client, config.canales.estado, refEstado, construirEmbedEstado(info));
+            const canal = await actualizarMensaje(client, config.canales.estado, refEstado, construirEmbedEstado(info, minutosCaido));
+            await actualizarNombreCanal(canal, info.online);
         } catch (e) {
             console.error('[SRV] Error canal estado:', e.message);
         }
@@ -207,22 +254,37 @@ async function actualizarCanales(client) {
         }
     }
 
-    // Aviso caída
-    if (!info.online && !servidorCaidoAvisado && config.canales.anuncios) {
-        servidorCaidoAvisado = true;
+    // Aviso en #anuncios — SOLO si es caída real (más de MINUTOS_REINICIO_NORMAL)
+    if (!info.online && minutosCaido >= MINUTOS_REINICIO_NORMAL && !avisoEnviado && config.canales.anuncios) {
+        avisoEnviado = true;
         try {
             const canal = await client.channels.fetch(config.canales.anuncios);
             await canal.send({
                 embeds: [
                     new EmbedBuilder()
                         .setTitle('⚠️ Servidor caído')
-                        .setDescription('El servidor TSDE Arkeanos no responde. Estamos revisándolo.')
+                        .setDescription(`El servidor **${SERVIDOR.nombre}** no responde desde hace ${minutosCaido} minutos. Estamos revisándolo.`)
                         .setColor(0xE74C3C)
                 ]
             });
-        } catch {}
-    } else if (info.online) {
-        servidorCaidoAvisado = false;
+            console.log('[SRV] Aviso de caída real enviado a #anuncios');
+        } catch (e) {
+            console.error('[SRV] Error enviando aviso:', e.message);
+        }
+    } else if (info.online && avisoEnviado) {
+        // El servidor volvió — avisar que ya está bien
+        avisoEnviado = false;
+        try {
+            const canal = await client.channels.fetch(config.canales.anuncios);
+            await canal.send({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle('✅ Servidor de nuevo en línea')
+                        .setDescription(`El servidor **${SERVIDOR.nombre}** ha vuelto a estar disponible.`)
+                        .setColor(0x2ECC71)
+                ]
+            });
+        } catch (e) {}
     }
 }
 
@@ -235,15 +297,23 @@ async function iniciarMonitorServidor(client) {
     }
 
     console.log('[SRV] Monitor del servidor iniciado — actualizando cada 2 minutos');
+    console.log(`[SRV] Reinicio normal considerado hasta ${MINUTOS_REINICIO_NORMAL} minutos caído`);
 
-    // Primera actualización inmediata
-    await actualizarCanales(client);
+    try {
+        await actualizarCanales(client);
+    } catch (e) {
+        console.error('[SRV] Error primera actualización:', e.message);
+    }
 
-    // Limpiar intervalo anterior
     if (intervalo) clearInterval(intervalo);
 
-    // Cada 2 minutos
-    intervalo = setInterval(() => actualizarCanales(client), 2 * 60 * 1000);
+    intervalo = setInterval(async () => {
+        try {
+            await actualizarCanales(client);
+        } catch (e) {
+            console.error('[SRV] Error actualización periódica:', e.message);
+        }
+    }, 2 * 60 * 1000);
 }
 
 module.exports = { iniciarMonitorServidor };
