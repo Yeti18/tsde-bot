@@ -21,9 +21,9 @@ module.exports = {
   // (con barra invertida delante) y copiando el código.
   // ──────────────────────────────────────────────────────────
   emojis: {
-    goldcoin:   "<:goldcoin:000000000000000000>",
-    wood:       "<:wood:000000000000000000>",
-    stone:      "<:stone:000000000000000000>",
+    goldcoin:   "<:goldcoin:1516757768231583845>",
+    wood:       "<:wood:1516757990349213818>",
+    stone:      "<:stone:1516758093550325850>",
     flint:      "<:flint:000000000000000000>",
     thatch:     "<:thatch:000000000000000000>",
     fiber:      "<:fiber:000000000000000000>",
