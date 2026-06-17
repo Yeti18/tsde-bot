@@ -24,15 +24,15 @@ module.exports = {
     goldcoin:   "<:GoldCoin:1516362698021929040>",
     wood:       "<:Wood:1516359277743312926>",
     stone:      "<:stone:1516758093550325850>",
-    flint:      "<:flint:000000000000000000>",
+    flint:      "<:Flint:1516772244519391253>",
     thatch:     "<:Thatch:1516359095270248548>",
-    fiber:      "<:fiber:000000000000000000>",
-    metal:      "<:metal:000000000000000000>",
-    crystal:    "<:crystal:000000000000000000>",
-    obsidian:   "<:obsidian:000000000000000000>",
-    oil:        "<:oil:000000000000000000>",
-    blackpearl: "<:blackpearl:000000000000000000>",
-    polymer:    "<:polymer:000000000000000000>",
+    fiber:      "<:Fiber:1516772238727184394>",
+    metal:      "<:Metal:1516772246536847450>",
+    crystal:    "<:Crystal:1516772046661484655>",
+    obsidian:   "<:Obsidian:1516772248373952554>",
+    oil:        "<:Oil:1516772249569464414> ",
+    blackpearl: "<:Black_Pearl:1516772227146846280>",
+    polymer:    "<:Organic_Polymer:1516772225745817722>",
     // genéricos de apoyo (opcional, si los subes)
     arrow:      "<:arrow:000000000000000000>",
     star:       "<:star:000000000000000000>",
@@ -120,16 +120,6 @@ module.exports = {
       lista: ["Wyvern Fuego*", "Wyvern Relámpago*", "Wyvern Veneno*", "Wyvern Hielo*", "Wyvern Sangre*", "Griffon", "Managarmr"],
       nota: "*Las Wyverns se venden siempre castradas. Para criar, roba huevos en el mapa."
     },
-    {
-      titulo: "💀 Endgame",
-      precio: 2000,
-      lista: ["Giganotosaurus", "Carcharodontosaurus"]
-    },
-    {
-      titulo: "🌌 Super Endgame",
-      precio: 2500,
-      lista: ["Tek Stryder", "Astrocetus", "Gigantoraptor"]
-    },
   ],
 
   // ──────────────────────────────────────────────────────────
@@ -137,7 +127,7 @@ module.exports = {
   // ──────────────────────────────────────────────────────────
   equipoCategorias: [
     {
-      titulo: "🔨 Herramientas",
+      titulo: "<:Metal_Pick:1516774613089128641>🔨 Herramientas",
       lista: [
         { nombre: "Pico de metal",  precio: 15 },
         { nombre: "Hacha de metal", precio: 15 },
