@@ -76,7 +76,7 @@ function embedRecursos() {
 // ──────────────────────────────────────────────────────────
 function embedDinosResumen() {
   const e = cfg.emojis.goldcoin;
-  const embed = baseEmbed(`${e} Tienda de criaturas — resumen de precios`, 'Usa `!economia dinos <categoria>` para ver la lista completa de cada grupo.');
+  const embed = baseEmbed(`${e} Tienda de criaturas — resumen de precios`);
   for (const cat of cfg.dinosCategorias) {
     embed.addFields({
       name: cat.titulo,
@@ -120,7 +120,7 @@ function embedEquipoCategoria(nombreCategoria) {
 }
 
 function embedEquipoResumen() {
-  const embed = baseEmbed('🛒 Tienda de equipamiento — categorías', 'Usa `!economia equipo <categoria>` para ver los precios de cada grupo.');
+  const embed = baseEmbed('🛒 Tienda de equipamiento — categorías');
   for (const cat of cfg.equipoCategorias) {
     embed.addFields({ name: cat.titulo, value: `${cat.lista.length} objetos disponibles`, inline: true });
   }
