@@ -104,6 +104,15 @@ module.exports = {
                 return interaction.reply({ content: '⛔ No tienes permiso para actualizar la economía.', ephemeral: true });
             }
 
+            // Comprobar que el bot puede borrar mensajes en este canal ANTES de pedir confirmación
+            const permisosBot = interaction.channel.permissionsFor(interaction.guild.members.me);
+            if (!permisosBot || !permisosBot.has('ManageMessages')) {
+                return interaction.reply({
+                    content: '⚠️ No tengo permiso de **"Gestionar mensajes"** en este canal, así que no puedo borrar los embeds anteriores (por eso solo publicaba los nuevos). Dale ese permiso al rol del bot en este canal (Ajustes del canal → Permisos) y vuelve a ejecutar `/economia actualizar`.',
+                    ephemeral: true,
+                });
+            }
+
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('eco_confirmar').setLabel('Sí, actualizar').setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('eco_cancelar').setLabel('Cancelar').setStyle(ButtonStyle.Secondary),
@@ -135,11 +144,26 @@ module.exports = {
 
             const mensajes = await interaction.channel.messages.fetch({ limit: 100 });
             const delBot = mensajes.filter(m => m.author.id === client.user.id);
+
+            let borrados = 0;
+            let fallos = 0;
             for (const m of delBot.values()) {
-                await m.delete().catch(() => {});
+                try {
+                    await m.delete();
+                    borrados++;
+                } catch (err) {
+                    fallos++;
+                    console.error(`[economia] No se pudo borrar el mensaje ${m.id}:`, err.message);
+                }
             }
+
             await enviarTodos(interaction.channel);
-            await interaction.followUp({ content: '✅ Economía actualizada con los datos actuales.', ephemeral: true });
+
+            let resumen = `✅ Economía actualizada. Mensajes anteriores borrados: ${borrados}.`;
+            if (fallos > 0) {
+                resumen += ` ⚠️ ${fallos} no se pudieron borrar (revisa la consola del bot con \`pm2 logs tsde-bot\` para ver el motivo exacto).`;
+            }
+            await interaction.followUp({ content: resumen, ephemeral: true });
         }
     },
 };
