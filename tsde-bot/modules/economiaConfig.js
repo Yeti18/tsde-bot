@@ -23,7 +23,7 @@ module.exports = {
   emojis: {
     goldcoin:   "<:GoldCoin:1516362698021929040>",
     wood:       "<:Wood:1516359277743312926>",
-    stone:      "<:stone:1516758093550325850>",
+    stone:      "<:Stone:1516359038601003038>",
     flint:      "<:Flint:1516772244519391253>",
     thatch:     "<:Thatch:1516359095270248548>",
     fiber:      "<:Fiber:1516772238727184394>",
@@ -85,37 +85,37 @@ module.exports = {
   // ──────────────────────────────────────────────────────────
   dinosCategorias: [
     {
-      titulo: "🐾 Mascotas y utilidad básica",
+      titulo: "<:jerboa:1516782796465770559> Mascotas y utilidad básica",
       precio: 150,
       lista: ["Achatina", "Araña (Araneo)", "Arqueopterix", "Dilofosaurio", "Carbonemys", "Escarabajo pelotero", "Terror Bird", "Troodon", "Vulture"]
     },
     {
-      titulo: "🦅 Transporte básico",
+      titulo: "<:pteranodon:1516783883343888584> Transporte básico",
       precio: 200,
       lista: ["Pteranodon", "Raptor", "Parasaur", "Trike", "Iguanodon", "Tapejara", "Ichthyosaurus", "Mesopithecus"]
     },
     {
-      titulo: "⛏️ Farmeo esencial",
+      titulo: "<:ankylosaurus:1516782665884500118> Farmeo esencial",
       precio: 400,
       lista: ["Ankylosaurus", "Doedicurus", "Castoroides", "Argentavis", "Mammoth", "Therizinosaurio", "Quetzal", "Brontosaurus", "Beelzebufo"]
     },
     {
-      titulo: "⚔️ Combate medio",
+      titulo: "<:allosaurus:1516787974216351764> Combate medio",
       precio: 500,
       lista: ["Carnotaurus", "Baryonyx", "Allosaurus", "Spinosaurus", "Deinonichus", "Megalodon", "Thylacoleo", "Karkinos"]
     },
     {
-      titulo: "🔥 Combate alto",
+      titulo: "<:rockelemental:1516783136149868635> Combate alto",
       precio: 800,
       lista: ["Rex", "Yutyrannus", "Daeodon", "Megalosaurus", "Desmodus", "Tropeognathus", "Sinomacrops", "Andrewsarchus"]
     },
     {
-      titulo: "🌊 Especialistas",
+      titulo: "<:tusoteuthis:1516787610662600865>  Especialistas",
       precio: 1000,
       lista: ["Basilosaurus", "Mosasaurus", "Tusoteuthis", "Megalania", "Bloodstalker", "Rhyniognatha", "Astrodelphis", "Fasolasuchus"]
     },
     {
-      titulo: "🐉 Top Tier (castrados)",
+      titulo: "<:managarmr:1516788686031949935> Top Tier (castrados)",
       precio: 1500,
       lista: ["Wyvern Fuego*", "Wyvern Relámpago*", "Wyvern Veneno*", "Wyvern Hielo*", "Wyvern Sangre*", "Griffon", "Managarmr"],
       nota: "*Las Wyverns se venden siempre castradas. Para criar, roba huevos en el mapa."
@@ -127,7 +127,7 @@ module.exports = {
   // ──────────────────────────────────────────────────────────
   equipoCategorias: [
     {
-      titulo: "<:Metal_Pick:1516774613089128641>🔨 Herramientas",
+      titulo: "<:Metal_Pick:1516774613089128641> Herramientas",
       lista: [
         { nombre: "Pico de metal",  precio: 15 },
         { nombre: "Hacha de metal", precio: 15 },
@@ -138,7 +138,7 @@ module.exports = {
       ]
     },
     {
-      titulo: "🗡️ Armas cuerpo a cuerpo",
+      titulo: "<:Sword:1516784458714579174> Armas cuerpo a cuerpo",
       lista: [
         { nombre: "Lanza de piedra", precio: 2 },
         { nombre: "Pica (Pike)",     precio: 25 },
@@ -147,7 +147,7 @@ module.exports = {
       ]
     },
     {
-      titulo: "🏹 Armas a distancia",
+      titulo: "<:Crossbow:1516778325287370762> Armas a distancia",
       lista: [
         { nombre: "Arco de madera",      precio: 10 },
         { nombre: "Ballesta",            precio: 35 },
@@ -157,7 +157,7 @@ module.exports = {
       ]
     },
     {
-      titulo: "🔫 Armas de fuego",
+      titulo: "<:Longneck_Rifle:1516786776390242364> Armas de fuego",
       lista: [
         { nombre: "Pistola simple",                  precio: 60 },
         { nombre: "Rifle de cuello largo",            precio: 90 },
@@ -171,7 +171,7 @@ module.exports = {
       ]
     },
     {
-      titulo: "💥 Explosivos y torretas",
+      titulo: "<:Auto_Turret:1516785830461440092> Explosivos y torretas",
       lista: [
         { nombre: "Granada",                  precio: 15 },
         { nombre: "Granada de racimo",        precio: 30 },
@@ -185,7 +185,7 @@ module.exports = {
       ]
     },
     {
-      titulo: "🛡️ Sets de armadura completos",
+      titulo: "<:Flak_Helmet:1516790224037085315>  Sets de armadura completos",
       lista: [
         { nombre: "Tela",             precio: 5 },
         { nombre: "Cuero",            precio: 15 },
@@ -197,11 +197,10 @@ module.exports = {
         { nombre: "Traje de peligro", precio: 150 },
         { nombre: "Buceo (SCUBA)",    precio: 100 },
         { nombre: "Antidisturbios",   precio: 250 },
-        { nombre: "Perla (Aquatica)", precio: 180 },
       ]
     },
     {
-      titulo: "🧪 Consumibles",
+      titulo: "<:Cooked_Meat_Cooked_Fish_Meat_or_:1516784749413142538> Consumibles",
       lista: [
         { nombre: "Kibble básico",            precio: "2 GC/u" },
         { nombre: "Kibble superior",          precio: "5 GC/u" },
@@ -219,9 +218,6 @@ module.exports = {
   // 6. ALQUILER DE PUESTOS DEL MERCADO
   // ──────────────────────────────────────────────────────────
   puestosMercado: [
-    { nombre: "Puesto básico (recursos)",  precio: "50 GC/semana",  detalle: "Hasta 5 líneas de venta — solo materiales" },
-    { nombre: "Puesto estándar (objetos)", precio: "100 GC/semana", detalle: "Hasta 10 líneas — objetos craftados, armas, armaduras" },
-    { nombre: "Puesto premium (dinos)",    precio: "200 GC/semana", detalle: "Hasta 5 dinos en venta" },
     { nombre: "Puesto completo",           precio: "300 GC/semana", detalle: "Sin límite de categoría" },
     { nombre: "Stand de subasta",          precio: "150 GC/evento", detalle: "1 lote por subasta — solo en eventos" },
   ],
@@ -234,8 +230,7 @@ module.exports = {
     "Existen límites diarios de venta por recurso para evitar inundar el mercado.",
     "Las Wyverns de tienda se venden siempre castradas.",
     "Los dinos de evento exclusivos no se pueden comprar — solo se ganan participando.",
-    "La casa de cambio permite intercambiar objetos, dinos y recursos 100% entre jugadores.",
-    "Existe un límite de compra diario en tienda para evitar romper la economía vía Tip4Serv.",
+    "La casa de cambio permite intercambiar objetos y recursos 100% entre jugadores.",
   ],
 
 };
