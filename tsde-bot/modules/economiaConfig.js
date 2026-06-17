@@ -67,10 +67,10 @@ module.exports = {
   // 3. RECURSOS — emojiKey debe coincidir con una key de emojis
   // ──────────────────────────────────────────────────────────
   recursos: [
-    { nombre: "Madera",            emojiKey: "wood",       venta: "300u = 1 <:GoldCoin:1516362698021929040>", compra: "300u = 2 <:GoldCoin:1516362698021929040>", limiteDiario: "2.000u/día" },
-    { nombre: "Piedra",            emojiKey: "stone",      venta: "400u = 1 <:GoldCoin:1516362698021929040>", compra: "400u = 2 <:GoldCoin:1516362698021929040>", limiteDiario: "2.000u/día" },
-    { nombre: "Sílex",             emojiKey: "flint",      venta: "200u = 1 <:GoldCoin:1516362698021929040>", compra: "200u = 2 <:GoldCoin:1516362698021929040>", limiteDiario: "1.500u/día" },
-    { nombre: "Paja",              emojiKey: "thatch",     venta: "300u = 1 <:GoldCoin:1516362698021929040>", compra: "300u = 2 <:GoldCoin:1516362698021929040>", limiteDiario: "1.500u/día" },
+    { nombre: "Madera",            emojiKey: "wood",       venta: "300u = 1" <:GoldCoin:1516362698021929040>, compra: "300u = 2" <:GoldCoin:1516362698021929040>, limiteDiario: "2.000u/día" },
+    { nombre: "Piedra",            emojiKey: "stone",      venta: "400u = 1" <:GoldCoin:1516362698021929040>, compra: "400u = 2" <:GoldCoin:1516362698021929040>, limiteDiario: "2.000u/día" },
+    { nombre: "Sílex",             emojiKey: "flint",      venta: "200u = 1" <:GoldCoin:1516362698021929040>, compra: "200u = 2" <:GoldCoin:1516362698021929040>, limiteDiario: "1.500u/día" },
+    { nombre: "Paja",              emojiKey: "thatch",     venta: "300u = 1" <:GoldCoin:1516362698021929040>, compra: "300u = 2" <:GoldCoin:1516362698021929040>, limiteDiario: "1.500u/día" },
     { nombre: "Fibra",             emojiKey: "fiber",      venta: "300u = 1 GC", compra: "300u = 2 GC", limiteDiario: "1.500u/día" },
     { nombre: "Metal",             emojiKey: "metal",      venta: "80u = 1 GC",  compra: "80u = 2 GC",  limiteDiario: "800u/día" },
     { nombre: "Cristal",           emojiKey: "crystal",    venta: "20u = 1 GC",  compra: "20u = 2 GC",  limiteDiario: "300u/día" },
