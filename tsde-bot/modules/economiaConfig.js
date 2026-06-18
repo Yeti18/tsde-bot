@@ -193,7 +193,7 @@ module.exports = {
         { nombre: "Tela del desierto",precio: 45 },
         { nombre: "Ghillie",          precio: 60 },
         { nombre: "Quitina",          precio: 70 },
-        { nombre: "Antiaérea (Flak)", precio: 120 },
+        { nombre: "Metal",            precio: 100 },
         { nombre: "Traje de peligro", precio: 150 },
         { nombre: "Buceo (SCUBA)",    precio: 100 },
         { nombre: "Antidisturbios",   precio: 250 },
