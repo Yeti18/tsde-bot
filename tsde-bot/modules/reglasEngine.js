@@ -20,17 +20,13 @@ function guardarDB(data) {
     fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
 }
 
-// --- EMBEDS DE NORMAS (divididas en 2 por límite de Discord) ---
+// --- EMBEDS DE NORMAS PARA EL CANAL #normas (uso con /normas) ---
 
-function construirEmbedNormas1() {
-    return new EmbedBuilder()
-        .setTitle('📜 Bienvenido a TSDE Arkeanos')
+function construirEmbedsNormasCanal() {
+    const embed1 = new EmbedBuilder()
+        .setTitle('📜 Normas de TSDE Arkeanos')
         .setColor(0x9B59B6)
-        .setDescription(
-            '¡Hola superviviente! Antes de entrar al servidor necesitas leer y aceptar las normas.\n\n' +
-            '**Si no aceptas las normas no podrás escribir en ningún canal.**\n\n' +
-            '⚠️ El desconocimiento de las normas no te exime de su cumplimiento.'
-        )
+        .setDescription('⚠️ El desconocimiento de las normas no exime de su cumplimiento.')
         .addFields(
             {
                 name: '🌐 GENERALES',
@@ -65,12 +61,9 @@ function construirEmbedNormas1() {
                 ].join('\n'),
                 inline: false
             }
-        )
-        .setFooter({ text: 'Sigue leyendo abajo ⬇️' });
-}
+        );
 
-function construirEmbedNormas2() {
-    return new EmbedBuilder()
+    const embed2 = new EmbedBuilder()
         .setColor(0x9B59B6)
         .addFields(
             {
@@ -92,7 +85,7 @@ function construirEmbedNormas2() {
             {
                 name: '📋 SANCIONES Y REPORTES',
                 value: [
-                    '→ Sin capturas o vídeo no se actuará.',
+                    '→ Sin capturas, logs o vídeo no se actuará.',
                     '→ Reportes únicamente por 🎫 tickets en Discord.',
                     '→ No se aceptan reportes por privados a admins.',
                     '→ Los admins tienen la última palabra siempre.',
@@ -101,28 +94,18 @@ function construirEmbedNormas2() {
                 inline: false
             }
         )
-        .setFooter({ text: 'Pulsa el botón de abajo para aceptar las normas y continuar.' });
+        .setFooter({ text: 'TSDE Arkeanos — Última actualización' })
+        .setTimestamp();
+
+    return [embed1, embed2];
 }
 
-function construirBotonAceptar() {
-    return new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('reg_aceptar')
-            .setLabel('✅ Acepto las normas')
-            .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-            .setCustomId('reg_rechazar')
-            .setLabel('❌ No acepto')
-            .setStyle(ButtonStyle.Danger)
-    );
-}
-
-// --- MODAL NOMBRE ARK ---
+// --- MODAL NOMBRE ARK (lo único que pide el bot ahora) ---
 
 function construirModalNombreArk() {
     const modal = new ModalBuilder()
         .setCustomId('reg_modal_nombre')
-        .setTitle('¿Cómo te llamas en ARK?');
+        .setTitle('Registro TSDE Arkeanos');
 
     modal.addComponents(
         new ActionRowBuilder().addComponents(
@@ -140,24 +123,40 @@ function construirModalNombreArk() {
     return modal;
 }
 
-// --- ENVIAR DM AL NUEVO MIEMBRO ---
+function construirBotonRegistro() {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('reg_iniciar_registro')
+            .setLabel('🎮 Registrar mi nombre de ARK')
+            .setStyle(ButtonStyle.Success)
+    );
+}
+
+// --- ENVIAR DM AL NUEVO MIEMBRO (solo pide nombre ARK, normas ya aceptadas en onboarding) ---
 
 async function enviarNormasDM(member) {
+    const embed = new EmbedBuilder()
+        .setTitle('🦖 ¡Bienvenido a TSDE Arkeanos!')
+        .setColor(0x2ECC71)
+        .setDescription(
+            'Ya has aceptado las normas al unirte al servidor. ✅\n\n' +
+            'Solo falta un paso para tener acceso completo:\n' +
+            '**Dinos tu nombre exacto en ARK: Survival Ascended.**\n\n' +
+            'Pulsa el botón de abajo para registrarte.'
+        );
+
     try {
         const dm = await member.createDM();
-        await dm.send({
-            embeds: [construirEmbedNormas1(), construirEmbedNormas2()],
-            components: [construirBotonAceptar()]
-        });
-        console.log(`[REG] DM enviado a ${member.user.username}`);
+        await dm.send({ embeds: [embed], components: [construirBotonRegistro()] });
+        console.log(`[REG] DM de registro enviado a ${member.user.username}`);
     } catch (error) {
         console.warn(`[REG] No se pudo enviar DM a ${member.user.username}: ${error.message}`);
         try {
             const canal = await member.client.channels.fetch(config.canales.bienvenida);
             await canal.send({
-                content: `${member} — No he podido enviarte un mensaje privado. Lee y acepta las normas aquí:`,
-                embeds: [construirEmbedNormas1(), construirEmbedNormas2()],
-                components: [construirBotonAceptar()]
+                content: `${member} — No he podido enviarte un mensaje privado. Regístrate aquí:`,
+                embeds: [embed],
+                components: [construirBotonRegistro()]
             });
         } catch (e) {
             console.error('[REG] Error enviando a canal bienvenida:', e.message);
@@ -170,21 +169,8 @@ async function enviarNormasDM(member) {
 async function handleButton(interaction, client) {
     const id = interaction.customId;
 
-    if (id === 'reg_aceptar') {
+    if (id === 'reg_iniciar_registro') {
         await interaction.showModal(construirModalNombreArk());
-        return;
-    }
-
-    if (id === 'reg_rechazar') {
-        const embed = new EmbedBuilder()
-            .setTitle('❌ Has rechazado las normas')
-            .setDescription(
-                'Has decidido no aceptar las normas de TSDE Arkeanos.\n\n' +
-                'Si cambias de opinión vuelve a unirte al servidor.\n¡Hasta pronto! 👋'
-            )
-            .setColor(0xE74C3C);
-
-        await interaction.update({ embeds: [embed], components: [] });
         return;
     }
 }
@@ -232,11 +218,11 @@ async function handleModal(interaction, client) {
             guardarDB(db);
 
             const embedConfirm = new EmbedBuilder()
-                .setTitle('✅ ¡Bienvenido a TSDE Arkeanos!')
+                .setTitle('✅ ¡Registro completado!')
                 .setDescription(
-                    `Registro completado, **${nombreArk}**.\n\n` +
+                    `Bienvenido, **${nombreArk}**.\n\n` +
                     '🦖 Ya tienes acceso completo al servidor.\n' +
-                    '📜 Recuerda las normas en #normas.\n' +
+                    '📜 Consulta las normas en #normas.\n' +
                     '🆘 ¿Necesitas ayuda? Abre un ticket en #tickets.\n\n' +
                     '**¡Buena suerte superviviente!** ⚔️'
                 )
@@ -250,9 +236,7 @@ async function handleModal(interaction, client) {
                 await canalBienvenida.send({
                     embeds: [
                         new EmbedBuilder()
-                            .setDescription(
-                                `🦖 **${nombreArk}** ha aceptado las normas y se ha unido a TSDE Arkeanos. ¡Bienvenido!`
-                            )
+                            .setDescription(`🦖 **${nombreArk}** se ha registrado y unido a TSDE Arkeanos. ¡Bienvenido!`)
                             .setColor(0x2ECC71)
                     ]
                 });
@@ -295,4 +279,9 @@ async function handleModal(interaction, client) {
     }
 }
 
-module.exports = { enviarNormasDM, handleButton, handleModal };
+module.exports = {
+    enviarNormasDM,
+    handleButton,
+    handleModal,
+    construirEmbedsNormasCanal
+};
