@@ -87,37 +87,37 @@ module.exports = {
     {
       titulo: "<:jerboa:1516782796465770559> Mascotas y utilidad básica",
       precio: 150,
-      lista: ["Achatina", "Araña (Araneo)", "Arqueopterix", "Dilofosaurio", "Carbonemys", "Escarabajo pelotero", "Terror Bird", "Troodon", "Vulture"]
+      lista: ["Achatina", "Araña", "Arqueopterix", "Dilofosaurio", "Carbonemys", "Escarabajo pelotero", "Terror Bird", "Troodon", "Vulture", "Mesopithecus"]
     },
     {
       titulo: "<:pteranodon:1516783883343888584> Transporte básico",
       precio: 200,
-      lista: ["Pteranodon", "Raptor", "Parasaur", "Trike", "Iguanodon", "Tapejara", "Ichthyosaurus", "Mesopithecus"]
+      lista: ["Pteranodon", "Raptor", "Parasaur", "Trike", "Iguanodon", "Tapejara", "Ichthyosaurus"]
     },
     {
       titulo: "<:ankylosaurus:1516782665884500118> Farmeo esencial",
       precio: 400,
-      lista: ["Ankylosaurus", "Doedicurus", "Castoroides", "Argentavis", "Mammoth", "Therizinosaurio", "Quetzal", "Brontosaurus", "Beelzebufo"]
+      lista: ["Ankylosaurus", "Doedicurus", "Castoroides", "Argentavis", "Mammoth", "Brontosaurus", "Beelzebufo"]
     },
     {
       titulo: "<:allosaurus:1516787974216351764> Combate medio",
       precio: 500,
-      lista: ["Carnotaurus", "Baryonyx", "Allosaurus", "Spinosaurus", "Deinonichus", "Megalodon", "Thylacoleo", "Karkinos"]
+      lista: ["Carnotaurus", "Baryonyx", "Allosaurus", "Spinosaurus", "Deinonichus", "Karkinos"]
     },
     {
       titulo: "<:rockelemental:1516783136149868635> Combate alto",
       precio: 800,
-      lista: ["Rex", "Yutyrannus", "Daeodon", "Megalosaurus", "Desmodus", "Tropeognathus", "Sinomacrops", "Andrewsarchus"]
+      lista: ["Rex", "Daeodon", "Megalosaurus", "Tropeognathus", "Sinomacrops", "Andrewsarchus"]
     },
     {
       titulo: "<:tusoteuthis:1516787610662600865>  Especialistas",
       precio: 1000,
-      lista: ["Basilosaurus", "Mosasaurus", "Tusoteuthis", "Megalania", "Bloodstalker", "Rhyniognatha", "Astrodelphis", "Fasolasuchus"]
+      lista: ["Megalodon", "Megalania", "Astrodelphis", "Fasolasuchus"]
     },
     {
       titulo: "<:managarmr:1516788686031949935> Top Tier (castrados)",
       precio: 1500,
-      lista: ["Wyvern Fuego*", "Wyvern Relámpago*", "Wyvern Veneno*", "Wyvern Hielo*", "Wyvern Sangre*", "Griffon", "Managarmr"],
+      lista: ["Wyvern Fuego*", "Wyvern Relámpago*", "Wyvern Veneno*", "Wyvern Hielo*"],
       nota: "*Las Wyverns se venden siempre castradas. Para criar, roba huevos en el mapa."
     },
   ],
@@ -132,16 +132,12 @@ module.exports = {
         { nombre: "Pico de metal",  precio: 15 },
         { nombre: "Hacha de metal", precio: 15 },
         { nombre: "Hoz de metal",   precio: 20 },
-        { nombre: "Pico de escalada (par)", precio: 30 },
-        { nombre: "Motosierra",     precio: 60 },
-        { nombre: "Taladro minero", precio: 80 },
       ]
     },
     {
       titulo: "<:Sword:1516784458714579174> Armas cuerpo a cuerpo",
       lista: [
-        { nombre: "Lanza de piedra", precio: 2 },
-        { nombre: "Pica (Pike)",     precio: 25 },
+        { nombre: "Pica",     precio: 25 },
         { nombre: "Garrote de madera", precio: 5 },
         { nombre: "Espada de metal", precio: 40 },
       ]
@@ -151,9 +147,6 @@ module.exports = {
       lista: [
         { nombre: "Arco de madera",      precio: 10 },
         { nombre: "Ballesta",            precio: 35 },
-        { nombre: "Arco compuesto",      precio: 80 },
-        { nombre: "Lanzador de arpones", precio: 50 },
-        { nombre: "Bumerán",             precio: 8 },
       ]
     },
     {
@@ -162,41 +155,19 @@ module.exports = {
         { nombre: "Pistola simple",                  precio: 60 },
         { nombre: "Rifle de cuello largo",            precio: 90 },
         { nombre: "Escopeta",                         precio: 100 },
-        { nombre: "Pistola fabricada",                precio: 70 },
-        { nombre: "Escopeta de corredera",            precio: 140 },
-        { nombre: "Fusil de asalto",                  precio: 180 },
-        { nombre: "Fusil de francotirador fabricado", precio: 200 },
-        { nombre: "Lanzallamas",                      precio: 120 },
-        { nombre: "Minigun",                          precio: 300 },
       ]
     },
     {
       titulo: "<:Auto_Turret:1516785830461440092> Explosivos y torretas",
       lista: [
-        { nombre: "Granada",                  precio: 15 },
-        { nombre: "Granada de racimo",        precio: 30 },
-        { nombre: "IED (cable trampa)",       precio: 20 },
-        { nombre: "Carga C4",                 precio: 80 },
-        { nombre: "Lanzacohetes",             precio: 250 },
         { nombre: "Torreta automática",       precio: 150 },
-        { nombre: "Torreta automática pesada",precio: 400 },
-        { nombre: "Torreta de balista",       precio: 100 },
-        { nombre: "Torreta catapulta",        precio: 100 },
       ]
     },
     {
       titulo: "<:Flak_Helmet:1516790224037085315>  Sets de armadura completos",
       lista: [
-        { nombre: "Tela",             precio: 5 },
-        { nombre: "Cuero",            precio: 15 },
-        { nombre: "Piel",             precio: 40 },
         { nombre: "Tela del desierto",precio: 45 },
-        { nombre: "Ghillie",          precio: 60 },
-        { nombre: "Quitina",          precio: 70 },
         { nombre: "Metal",            precio: 100 },
-        { nombre: "Traje de peligro", precio: 150 },
-        { nombre: "Buceo (SCUBA)",    precio: 100 },
-        { nombre: "Antidisturbios",   precio: 250 },
       ]
     },
     {
@@ -205,8 +176,7 @@ module.exports = {
         { nombre: "Kibble básico",            precio: "2 GC/u" },
         { nombre: "Kibble superior",          precio: "5 GC/u" },
         { nombre: "Comida cocinada",          precio: "1 GC/5u" },
-        { nombre: "Antídoto contra venenos",  precio: 10 },
-        { nombre: "Bioveneno / narcótico",    precio: "1 GC/10u" },
+        { nombre: "narcótico",                precio: "1 GC/10u" },
         { nombre: "Estimulante",              precio: "1 GC/3u" },
         { nombre: "Cryopod vacío",            precio: 30 },
         { nombre: "Recarga Cryopod",          precio: 5 },
@@ -219,7 +189,7 @@ module.exports = {
   // ──────────────────────────────────────────────────────────
   puestosMercado: [
     { nombre: "Puesto completo",           precio: "300 <:GoldCoin:1516362698021929040> /semana", detalle: "Sin límite de categoría" },
-    { nombre: "Stand de subasta",          precio: "150 <:GoldCoin:1516362698021929040> /evento", detalle: "1 lote por subasta — solo en eventos" },
+    { nombre: "Stand de subasta",          precio: "150 <:GoldCoin:1516362698021929040> /evento", detalle: "Max 10 dinos por subasta — solo en eventos" },
   ],
 
   // ──────────────────────────────────────────────────────────
