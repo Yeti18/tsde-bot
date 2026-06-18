@@ -20,68 +20,83 @@ function guardarDB(data) {
     fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
 }
 
-// --- EMBED DE NORMAS ---
+// --- EMBEDS DE NORMAS (divididas en 2 por límite de Discord) ---
 
-function construirEmbedNormas() {
+function construirEmbedNormas1() {
     return new EmbedBuilder()
         .setTitle('📜 Bienvenido a TSDE Arkeanos')
         .setColor(0x9B59B6)
         .setDescription(
             '¡Hola superviviente! Antes de entrar al servidor necesitas leer y aceptar las normas.\n\n' +
-            '**Si no aceptas las normas no podrás escribir en ningún canal.**'
+            '**Si no aceptas las normas no podrás escribir en ningún canal.**\n\n' +
+            '⚠️ El desconocimiento de las normas no te exime de su cumplimiento.'
         )
         .addFields(
             {
                 name: '🌐 GENERALES',
                 value: [
-                    '**1.** Nombres genéricos como "Humano" o "Bob" serán baneados sin aviso.',
-                    '**2.** Insultos, faltas de respeto o acoso = baneo inmediato.',
-                    '**3.** Publicidad de otros servidores o webs = baneo inmediato.',
-                    '**4.** Prohibido el uso de exploits, bugs o cheats.',
-                    '**5.** Prohibido el uso de dinos blindados.',
-                    '**6.** Los admins no se responsabilizan de pérdidas en reinicios o caídas.'
+                    '**Nombres** — Nombres genéricos como "Humano" o "Bob" serán baneados sin aviso.',
+                    '**Respeto** — Insultos, faltas de respeto o acoso en cualquier canal = baneo inmediato.',
+                    '**Publicidad** — Prohibida la publicidad de otros servidores o webs. Baneo inmediato.',
+                    '**Exploits y bugs** — Prohibido el uso de exploits, bugs o mecánicas no intencionadas.',
+                    '**Dinos blindados** — Prohibido su uso en cualquier circunstancia.',
+                    '**Responsabilidad** — Los admins no se responsabilizan de pérdidas en reinicios o caídas.'
                 ].join('\n'),
                 inline: false
             },
             {
                 name: '🛡️ TRIBUS',
                 value: [
-                    '**1.** Máximo 6 jugadores por tribu.',
-                    '**2.** Lo que hace un miembro es responsabilidad de la tribu entera.',
-                    '**3.** Prohibido el acoso continuado a una misma tribu.',
-                    '**4.** Las guerras entre tribus requieren motivos justificados.'
+                    '**Máximo** — 6 jugadores por tribu.',
+                    '**Responsabilidad interna** — Lo que haga un miembro es responsabilidad de toda la tribu.',
+                    '**Acoso entre tribus** — Prohibido el acoso continuado. Deben poder recuperarse tras un ataque.',
+                    '**Guerra entre tribus** — Si ambas se declaran la guerra, sin restricciones entre ellas. Una sola declaración necesita motivos justificados y aprobación de la administración.'
                 ].join('\n'),
                 inline: false
             },
             {
                 name: '🏗️ CONSTRUCCIÓN',
                 value: [
-                    '**1.** Prohibido construir en cuevas, recursos, spawns y artefactos.',
-                    '**2.** Prohibido marcar terreno con cimientos sin construir.',
-                    '**3.** Las estructuras de domesticación deben eliminarse inmediatamente.',
-                    '**4.** Máximo 2 bases por tribu.',
-                    '**5.** Estructuras abandonadas serán eliminadas sin aviso.'
+                    '**Zonas prohibidas** — No construir en cuevas, recursos, spawns, artefactos ni notas de explorador.',
+                    '**Spam de estructuras** — Prohibido marcar terreno sin construir.',
+                    '**Domesticación** — Las estructuras para domar se eliminan inmediatamente después.',
+                    '**Límite de bases** — Máximo 2 bases por tribu.',
+                    '**Abandono** — Estructuras dañadas o sin uso serán eliminadas sin aviso.'
                 ].join('\n'),
                 inline: false
-            },
+            }
+        )
+        .setFooter({ text: 'Sigue leyendo abajo ⬇️' });
+}
+
+function construirEmbedNormas2() {
+    return new EmbedBuilder()
+        .setColor(0x9B59B6)
+        .addFields(
             {
                 name: '⚔️ PVP Y RAIDS',
                 value: [
-                    '**1.** PVP libre en todo el mapa salvo excepciones.',
-                    '**2.** Prohibido raidear bases de madera o piedra con menos de 3 días.',
-                    '**3.** Prohibido atacar zonas comunes o estructuras TSDE-ADMIN.',
-                    '**4.** Prohibido atacar durante eventos oficiales.',
-                    '**5.** Prohibido el acoso post-raid — deja recuperarse a las tribus.'
+                    '**PVP libre** — Permitido en todo el mapa salvo excepciones.',
+                    '**Protección Bandera Blanca** — Los nuevos pueden solicitar 72h de protección abriendo un 🎫 ticket. Si atacan o roban durante este periodo: baneo inmediato.',
+                    '**Zonas comunes** — Prohibido atacar o dañar zonas comunes y estructuras de TSDE-ADMIN. Mercado, Zona de Crafteo y Prisión son peatonales — los dinos van al Parking de Dinos. Robar en Crafteo: baneo inmediato.',
+                    '**Durante eventos** — Prohibido atacar mientras hay un evento oficial activo.',
+                    '**Acoso post-raid** — Deja recuperarse a la tribu raideada antes de volver a atacar.'
                 ].join('\n'),
                 inline: false
             },
             {
-                name: '📋 REPORTES Y SANCIONES',
+                name: '🌿 PVE',
+                value: '**Agarrar jugadores** — Prohibido agarrar o mover jugadores de otras tribus fuera de un combate acordado. Denuncias requieren clip o captura.',
+                inline: false
+            },
+            {
+                name: '📋 SANCIONES Y REPORTES',
                 value: [
                     '→ Sin capturas o vídeo no se actuará.',
-                    '→ Reportes únicamente por #tickets en Discord.',
+                    '→ Reportes únicamente por 🎫 tickets en Discord.',
                     '→ No se aceptan reportes por privados a admins.',
-                    '→ Los admins tienen la última palabra siempre.'
+                    '→ Los admins tienen la última palabra siempre.',
+                    '→ El incumplimiento puede resultar en kick, baneo temporal o permanente según la gravedad.'
                 ].join('\n'),
                 inline: false
             }
@@ -131,7 +146,7 @@ async function enviarNormasDM(member) {
     try {
         const dm = await member.createDM();
         await dm.send({
-            embeds: [construirEmbedNormas()],
+            embeds: [construirEmbedNormas1(), construirEmbedNormas2()],
             components: [construirBotonAceptar()]
         });
         console.log(`[REG] DM enviado a ${member.user.username}`);
@@ -141,7 +156,7 @@ async function enviarNormasDM(member) {
             const canal = await member.client.channels.fetch(config.canales.bienvenida);
             await canal.send({
                 content: `${member} — No he podido enviarte un mensaje privado. Lee y acepta las normas aquí:`,
-                embeds: [construirEmbedNormas()],
+                embeds: [construirEmbedNormas1(), construirEmbedNormas2()],
                 components: [construirBotonAceptar()]
             });
         } catch (e) {
@@ -155,13 +170,11 @@ async function enviarNormasDM(member) {
 async function handleButton(interaction, client) {
     const id = interaction.customId;
 
-    // Paso 1 — Acepta las normas → mostrar modal de nombre ARK
     if (id === 'reg_aceptar') {
         await interaction.showModal(construirModalNombreArk());
         return;
     }
 
-    // Rechazar normas
     if (id === 'reg_rechazar') {
         const embed = new EmbedBuilder()
             .setTitle('❌ Has rechazado las normas')
@@ -183,21 +196,17 @@ async function handleModal(interaction, client) {
         try {
             const nombreArk = interaction.fields.getTextInputValue('nombre_ark').trim();
 
-            // Obtener guild y member
             const guild = interaction.guild || await client.guilds.fetch(config.guildId);
             const member = interaction.guild
                 ? interaction.member
                 : await guild.members.fetch(interaction.user.id);
 
-            // Cambiar apodo en Discord al nombre de ARK
             try {
                 await member.setNickname(nombreArk, 'Registro TSDE — Nombre ARK');
             } catch (e) {
-                // Si no puede cambiar el apodo (ej: el usuario es admin del servidor)
                 console.warn(`[REG] No se pudo cambiar apodo de ${interaction.user.username}: ${e.message}`);
             }
 
-            // Quitar Superviviente y dar Arkeano
             const rolSuperv = guild.roles.cache.find(r =>
                 r.id === config.roles.superviviente || r.name === 'Superviviente'
             );
@@ -212,7 +221,6 @@ async function handleModal(interaction, client) {
                 await member.roles.add(rolArkeano);
             }
 
-            // Guardar en base de datos
             const db = cargarDB();
             if (!db.jugadores) db.jugadores = {};
             db.jugadores[interaction.user.id] = {
@@ -223,7 +231,6 @@ async function handleModal(interaction, client) {
             };
             guardarDB(db);
 
-            // Confirmar al jugador
             const embedConfirm = new EmbedBuilder()
                 .setTitle('✅ ¡Bienvenido a TSDE Arkeanos!')
                 .setDescription(
@@ -238,7 +245,6 @@ async function handleModal(interaction, client) {
 
             await interaction.update({ embeds: [embedConfirm], components: [] });
 
-            // Avisar en #bienvenida
             try {
                 const canalBienvenida = await client.channels.fetch(config.canales.bienvenida);
                 await canalBienvenida.send({
@@ -254,7 +260,6 @@ async function handleModal(interaction, client) {
                 console.warn('[REG] No se pudo avisar en bienvenida:', e.message);
             }
 
-            // Avisar en logs con los datos del registro
             try {
                 const canalLogs = await client.channels.fetch(config.canales.logs);
                 await canalLogs.send({
@@ -276,7 +281,6 @@ async function handleModal(interaction, client) {
 
         } catch (error) {
             console.error('[REG] Error en registro:', error);
-            // Ignorar errores de permisos de apodo (código 50013)
             if (error.code === 50013) {
                 console.warn('[REG] Sin permisos para cambiar apodo — registro completado igualmente');
                 return;
