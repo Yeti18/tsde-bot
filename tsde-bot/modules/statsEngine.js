@@ -139,14 +139,31 @@ async function iniciarStats(client) {
 
         console.log('[STATS] Panel de estadísticas iniciado');
 
-        // Actualizar cada hora
+        // Actualizar cada hora — auto-recupera si el mensaje fue borrado
         if (intervalo) clearInterval(intervalo);
         intervalo = setInterval(async () => {
             try {
                 const statsActualizadas = await calcularStats(guild);
                 const embedActualizado = construirEmbedStats(statsActualizadas);
-                const msg = await canal.messages.fetch(mensajeStatsId);
-                await msg.edit({ embeds: [embedActualizado] });
+
+                try {
+                    const msg = await canal.messages.fetch(mensajeStatsId);
+                    await msg.edit({ embeds: [embedActualizado] });
+                } catch (errFetch) {
+                    // El mensaje ya no existe — buscar otro del bot o crear uno nuevo
+                    console.warn('[STATS] Mensaje original no encontrado, recreando...');
+                    const mensajesRecientes = await canal.messages.fetch({ limit: 10 });
+                    const otroExistente = mensajesRecientes.find(m => m.author.id === client.user.id);
+
+                    if (otroExistente) {
+                        await otroExistente.edit({ embeds: [embedActualizado] });
+                        mensajeStatsId = otroExistente.id;
+                    } else {
+                        const nuevoMsg = await canal.send({ embeds: [embedActualizado] });
+                        mensajeStatsId = nuevoMsg.id;
+                    }
+                }
+
                 console.log('[STATS] Estadísticas actualizadas');
             } catch (e) {
                 console.error('[STATS] Error actualizando:', e.message);
