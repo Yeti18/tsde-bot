@@ -14,6 +14,9 @@ const config = require('../config.json');
 
 const DB_PATH = './database.json';
 
+// Total de puestos físicos del mercado — cambia este número si añades más en el futuro
+const TOTAL_PUESTOS = 11;
+
 // Tags del foro (se cachean al primer uso)
 let forumTags = null;
 
@@ -403,6 +406,59 @@ async function handleButton(interaction, client) {
     }
 }
 
+// --- PANEL DE PUESTOS DISPONIBLES (#puestos-disponibles) ---
+
+async function actualizarPanelPuestos(client) {
+    if (!config.canales.puestos_disponibles) {
+        console.warn('[MER] Canal puestos_disponibles no configurado en config.json');
+        return;
+    }
+
+    const db = cargarDB();
+    const mercaderes = db.mercaderes || {};
+
+    // Mapear qué número de puesto está ocupado por quién
+    const ocupados = {};
+    for (const datos of Object.values(mercaderes)) {
+        const match = datos.puesto?.match(/Puesto (\d+)/);
+        if (match) ocupados[parseInt(match[1])] = datos.username;
+    }
+
+    const lineas = [];
+    for (let i = 1; i <= TOTAL_PUESTOS; i++) {
+        lineas.push(
+            ocupados[i]
+                ? `🔴 **Puesto ${i}** — Ocupado por ${ocupados[i]}`
+                : `🟢 **Puesto ${i}** — Disponible`
+        );
+    }
+
+    const ocupadosCount = Object.keys(ocupados).length;
+    const disponibles = TOTAL_PUESTOS - ocupadosCount;
+
+    const embed = new EmbedBuilder()
+        .setTitle('🏪 Puestos del Mercado TSDE')
+        .setColor(disponibles > 0 ? 0xE67E22 : 0xE74C3C)
+        .setDescription(lineas.join('\n'))
+        .addFields({ name: '📊 Resumen', value: `${disponibles}/${TOTAL_PUESTOS} disponibles`, inline: true })
+        .setFooter({ text: '¿Quieres un puesto? Pide a un administrador que te lo asigne.' })
+        .setTimestamp();
+
+    try {
+        const canal = await client.channels.fetch(config.canales.puestos_disponibles);
+        const mensajes = await canal.messages.fetch({ limit: 10 });
+        const existente = mensajes.find(m => m.author.id === client.user.id);
+
+        if (existente) {
+            await existente.edit({ embeds: [embed] });
+        } else {
+            await canal.send({ embeds: [embed] });
+        }
+    } catch (e) {
+        console.error('[MER] Error actualizando panel de puestos:', e.message);
+    }
+}
+
 // --- DAR PUESTO (sin hilo, solo rol + DB) ---
 
 async function darRolMercader(interaction, client, usuario, numPuesto) {
@@ -465,6 +521,9 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
         };
         guardarDB(db);
 
+        // Actualizar el panel público de puestos disponibles
+        await actualizarPanelPuestos(client);
+
         const replyFields = [
             { name: '👤 Mercader', value: displayName, inline: true },
             { name: '🏪 Puesto',   value: nombrePuesto,     inline: true }
@@ -526,6 +585,9 @@ async function quitarRolMercader(interaction, client, usuario) {
 
         if (db.mercaderes?.[usuario.id]) delete db.mercaderes[usuario.id];
         guardarDB(db);
+
+        // Actualizar el panel público de puestos disponibles
+        await actualizarPanelPuestos(client);
 
         await interaction.reply({
             embeds: [
@@ -606,5 +668,6 @@ module.exports = {
     darRolMercader,
     quitarRolMercader,
     esMercader,
-    setupMercado
+    setupMercado,
+    actualizarPanelPuestos
 };
