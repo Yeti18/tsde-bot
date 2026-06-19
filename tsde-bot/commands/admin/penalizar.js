@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs');
 
 const DB_PATH = './database.json';
@@ -7,6 +7,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('penalizar')
         .setDescription('Penaliza o despenaliza a un jugador [ADMIN]')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
         .addStringOption(opt =>
             opt.setName('jugador')
                 .setDescription('Nombre del jugador en Discord')

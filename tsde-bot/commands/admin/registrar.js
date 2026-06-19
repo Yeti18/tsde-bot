@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs');
 
 const DB_PATH = './database.json';
@@ -7,6 +7,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('registrar')
         .setDescription('Gestionar registros de jugadores [ADMIN]')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
         .addSubcommand(sub =>
             sub.setName('actualizar')
                 .setDescription('Actualizar el nombre ARK de un jugador')

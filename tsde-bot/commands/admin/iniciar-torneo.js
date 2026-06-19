@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const torneoEngine = require('../../modules/torneoEngine.js');
 const fs = require('fs');
 
@@ -6,6 +6,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('iniciar-torneo')
         .setDescription('Convierte un evento en torneo con bracket automático [ADMIN]')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
         .addStringOption(opt =>
             opt.setName('evento_id')
                 .setDescription('ID del evento (se ve en la base de datos)')
