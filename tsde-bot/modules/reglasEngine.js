@@ -5,7 +5,8 @@ const {
     ButtonStyle,
     ModalBuilder,
     TextInputBuilder,
-    TextInputStyle
+    TextInputStyle,
+    MessageFlags
 } = require('discord.js');
 const fs = require('fs');
 const config = require('../config.json');
@@ -241,19 +242,27 @@ async function handleModal(interaction, client) {
                 .addFields({ name: '🎮 Nombre en ARK registrado', value: `\`${nombreArk}\``, inline: true })
                 .setColor(0x2ECC71);
 
-            await interaction.update({ embeds: [embedConfirm], components: [] });
+            // CRÍTICO: usar reply ephemeral, NO update — el mensaje fijo es compartido
+            // por todos los jugadores, no se puede editar/reemplazar su botón
+            await interaction.reply({
+                embeds: [embedConfirm],
+                flags: MessageFlags.Ephemeral
+            });
 
+            // Aviso a #general (no a #bienvenida, para no desplazar el mensaje fijo del botón)
             try {
-                const canalBienvenida = await client.channels.fetch(config.canales.bienvenida);
-                await canalBienvenida.send({
-                    embeds: [
-                        new EmbedBuilder()
-                            .setDescription(`🦖 **${nombreArk}** se ha registrado y unido a TSDE Arkeanos. ¡Bienvenido!`)
-                            .setColor(0x2ECC71)
-                    ]
-                });
+                if (config.canales.general) {
+                    const canalGeneral = await client.channels.fetch(config.canales.general);
+                    await canalGeneral.send({
+                        embeds: [
+                            new EmbedBuilder()
+                                .setDescription(`🦖 **${nombreArk}** se ha registrado y unido a TSDE Arkeanos. ¡Dale la bienvenida!`)
+                                .setColor(0x2ECC71)
+                        ]
+                    });
+                }
             } catch (e) {
-                console.warn('[REG] No se pudo avisar en bienvenida:', e.message);
+                console.warn('[REG] No se pudo avisar en general:', e.message);
             }
 
             try {
