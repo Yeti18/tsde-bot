@@ -8,7 +8,8 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildPresences
     ]
 });
 
@@ -22,5 +23,5 @@ for (const file of handlerFiles) {
     require(`./handlers/${file}`)(client);
 }
 
-// Arrancar el bot
-client.login(config.token);
+// Arrancar el bot — lee de Secrets de Replit primero, luego config.json
+client.login(process.env.DISCORD_TOKEN || config.token);
