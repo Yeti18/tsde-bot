@@ -1,6 +1,7 @@
 const { iniciarStats } = require('../modules/statsEngine.js');
 const { iniciarVotaciones } = require('../modules/votacionesEngine.js');
 const { iniciarMonitorServidor } = require('../modules/servidorEngine.js');
+const { asegurarMensajeBienvenida } = require('../modules/reglasEngine.js');
 
 module.exports = {
     name: 'clientReady',
@@ -13,5 +14,6 @@ module.exports = {
         await iniciarStats(client);
         await iniciarVotaciones(client);
         await iniciarMonitorServidor(client);
+        await asegurarMensajeBienvenida(client);
     }
 };
