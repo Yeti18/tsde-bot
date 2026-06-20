@@ -132,35 +132,47 @@ function construirBotonRegistro() {
     );
 }
 
-// --- ENVIAR DM AL NUEVO MIEMBRO (solo pide nombre ARK, normas ya aceptadas en onboarding) ---
+// --- MENSAJE FIJO DE BIENVENIDA EN #bienvenida (en vez de DM) ---
 
-async function enviarNormasDM(member) {
-    const embed = new EmbedBuilder()
+function construirEmbedBienvenida() {
+    return new EmbedBuilder()
         .setTitle('🦖 ¡Bienvenido a TSDE Arkeanos!')
         .setColor(0x2ECC71)
         .setDescription(
-            'Ya has aceptado las normas al unirte al servidor. ✅\n\n' +
-            'Solo falta un paso para tener acceso completo:\n' +
-            '**Dinos tu nombre exacto en ARK: Survival Ascended.**\n\n' +
-            'Pulsa el botón de abajo para registrarte.'
-        );
+            '¡Hola superviviente! Nos alegra tenerte aquí.\n\n' +
+            '**Para tener acceso completo al servidor necesitas:**\n' +
+            '📜 Leer las normas en `#normas`\n' +
+            '🎮 Registrar tu nombre exacto en ARK: Survival Ascended\n\n' +
+            'Pulsa el botón de abajo — al hacerlo confirmas que has leído ' +
+            'y aceptas las normas del servidor.'
+        )
+        .setFooter({ text: 'TSDE Arkeanos — Registro de nuevos jugadores' });
+}
+
+// Asegura que el mensaje fijo con botón existe en #bienvenida (idempotente)
+async function asegurarMensajeBienvenida(client) {
+    if (!config.canales.bienvenida) {
+        console.warn('[REG] Canal bienvenida no configurado');
+        return;
+    }
 
     try {
-        const dm = await member.createDM();
-        await dm.send({ embeds: [embed], components: [construirBotonRegistro()] });
-        console.log(`[REG] DM de registro enviado a ${member.user.username}`);
-    } catch (error) {
-        console.warn(`[REG] No se pudo enviar DM a ${member.user.username}: ${error.message}`);
-        try {
-            const canal = await member.client.channels.fetch(config.canales.bienvenida);
-            await canal.send({
-                content: `${member} — No he podido enviarte un mensaje privado. Regístrate aquí:`,
-                embeds: [embed],
-                components: [construirBotonRegistro()]
-            });
-        } catch (e) {
-            console.error('[REG] Error enviando a canal bienvenida:', e.message);
+        const canal = await client.channels.fetch(config.canales.bienvenida);
+        const mensajes = await canal.messages.fetch({ limit: 10 });
+        const existente = mensajes.find(m => m.author.id === client.user.id);
+
+        const embed = construirEmbedBienvenida();
+        const botones = construirBotonRegistro();
+
+        if (existente) {
+            await existente.edit({ embeds: [embed], components: [botones] });
+        } else {
+            const msg = await canal.send({ embeds: [embed], components: [botones] });
+            await msg.pin().catch(() => {});
         }
+        console.log('[REG] Mensaje de bienvenida con botón asegurado en #bienvenida');
+    } catch (e) {
+        console.error('[REG] Error asegurando mensaje de bienvenida:', e.message);
     }
 }
 
@@ -280,7 +292,7 @@ async function handleModal(interaction, client) {
 }
 
 module.exports = {
-    enviarNormasDM,
+    asegurarMensajeBienvenida,
     handleButton,
     handleModal,
     construirEmbedsNormasCanal
