@@ -44,6 +44,7 @@ function construirEmbedSolicitud() {
             'Si eres nuevo en TSDE Arkeanos, puedes solicitar 72 horas de protección ' +
             'para empezar tranquilo sin que te raideen.\n\n' +
             '**⚠️ ANTES de solicitarla, asegúrate de:**\n' +
+            '✅ Haber aprendido el engrama WHITE FLAG PROTECTION (Bandera Blanca) *(10 Piel<:Hide:1518200933170024559> , 50 Madera<:Wood:1516359277743312926>, 50 Fibra<:Fiber:1516772238727184394>)*\n' +
             '✅ Haber crafteado la Bandera Blanca *(10 Piel, 50 Madera, 50 Fibra)*\n' +
             '✅ Haberla colocado visible cerca de tu base\n\n' +
             'Una vez confirmado, pulsa el botón de abajo. Un administrador ' +
