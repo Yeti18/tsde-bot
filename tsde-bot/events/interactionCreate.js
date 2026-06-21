@@ -50,6 +50,8 @@ module.exports = {
             if (id.startsWith('mer_')) return require('../modules/mercadoEngine.js').handleModal(interaction, client);
             if (id.startsWith('hof_')) return require('../modules/hallFameEngine.js').handleModal(interaction, client);
             if (id.startsWith('msg_')) return require('../commands/admin/mensaje.js').handleModal(interaction, client);
+            if (id.startsWith('bb_')) return require('../modules/banderaBlancaEngine.js').handleModal(interaction, client);
+            if (id.startsWith('bb_')) return require('../modules/banderaBlancaEngine.js').handleButton(interaction, client);
         }
     }
 };
