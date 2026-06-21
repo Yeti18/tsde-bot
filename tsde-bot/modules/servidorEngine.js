@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const Rcon = require('rcon');
+const fs = require('fs');
 const config = require('../config.json');
 
 let mensajeEstadoId = null;
@@ -17,6 +18,22 @@ const SERVIDOR = config.servidor || {
     maxJugadores: 70,
     region: 'EU'
 };
+
+// --- BUSCAR JUGADOR REGISTRADO POR NOMBRE DE ARK ---
+
+function buscarJugadorRegistrado(nombreArk) {
+    try {
+        const db = JSON.parse(fs.readFileSync('./database.json', 'utf8'));
+        const jugadores = db.jugadores || {};
+        const entrada = Object.values(jugadores).find(j =>
+            j.nombreArk && j.nombreArk.toLowerCase() === nombreArk.toLowerCase()
+        );
+        return entrada || null;
+    } catch (e) {
+        return null;
+    }
+}
+
 
 // Minutos que tiene que estar caído para considerarse "caída real" y no reinicio normal
 const MINUTOS_REINICIO_NORMAL = 8;
@@ -157,7 +174,14 @@ function construirEmbedJugadores(info) {
         return embed;
     }
 
-    const lista = info.jugadores.map((j, i) => `${i + 1}. 🦖 ${j}`).join('\n');
+    const lista = info.jugadores.map((j, i) => {
+        const registrado = buscarJugadorRegistrado(j);
+        if (registrado) {
+            const nombrePersonaje = registrado.nombrePersonaje ? ` (${registrado.nombrePersonaje})` : '';
+            return `${i + 1}. 🦖 **${j}**${nombrePersonaje} — <@${registrado.discordId}>`;
+        }
+        return `${i + 1}. 🦖 **${j}** — *sin registrar*`;
+    }).join('\n');
     embed.setDescription(lista);
     embed.addFields(
         { name: '👥 Conectados', value: `${info.jugadores.length}/${SERVIDOR.maxJugadores}`, inline: true },
@@ -197,9 +221,12 @@ async function actualizarMensaje(client, canalId, mensajeIdRef, embed) {
 // --- CAMBIAR NOMBRE DEL CANAL (con límite de Discord respetado) ---
 
 async function actualizarNombreCanal(canal, online) {
-    const nombreBase = canal.name.replace(/^[🟢🔴🟡]/, '').replace(/^[\s|_-]+/, '');
+    // Quitar cualquier emoji de estado al principio del nombre (verde/rojo/amarillo)
+    const nombreBase = canal.name
+        .replace(/^[\u{1F7E2}\u{1F534}\u{1F7E1}]/u, '')
+        .replace(/^[\s\-_|]+/, '');
     const emoji = online ? '🟢' : '🔴';
-    const nuevoNombre = `${emoji}${nombreBase}`;
+    const nuevoNombre = `${emoji}-${nombreBase}`;
 
     // Solo cambiar si realmente cambió el estado — evita rate limit de Discord (2 cambios/10min)
     if (nombreCanalActual === online) return;
