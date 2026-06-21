@@ -6,7 +6,9 @@ const {
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
-    MessageFlags
+    MessageFlags,
+    PermissionFlagsBits,
+    ChannelType
 } = require('discord.js');
 const fs = require('fs');
 const config = require('../config.json');
@@ -34,7 +36,11 @@ function guardarBandera(data) {
     guardarDB(db);
 }
 
-// --- EMBED FIJO DE SOLICITUD (mensaje permanente en canal) ---
+function esAdmin(interaction) {
+    return interaction.member.permissions.has('ManageMessages');
+}
+
+// --- EMBED FIJO DE SOLICITUD (mensaje permanente en canal público) ---
 
 function construirEmbedSolicitud() {
     return new EmbedBuilder()
@@ -47,8 +53,13 @@ function construirEmbedSolicitud() {
             '✅ Haber aprendido el engrama WHITE FLAG PROTECTION (Bandera Blanca)\n' +
             '✅ Haber crafteado la Bandera Blanca *(10 Piel<:Hide:1518200933170024559>, 50 Madera<:Wood:1516359277743312926>, 50 Fibra<:Fiber:1516772238727184394>)*\n' +
             '✅ Haberla colocado visible cerca de tu base\n\n' +
-            'Una vez confirmado, pulsa el botón de abajo. Un administrador ' +
-            'entrará al juego para activar tu protección lo antes posible.\n\n' +
+            '⚠️ **Solo válida para tus primeros días en el servidor.** No se puede ' +
+            'solicitar si ya la usaste antes o llevas tiempo jugando.\n\n' +
+            '⚠️ **Solo válido para jugadores en superficie.** Si te escondes en ' +
+            'una cueva nada más empezar, no eres apto para esta protección — ' +
+            'es para quien juega de forma normal y visible, no para evitar el PvP.\n\n' +
+            'Una vez confirmado, pulsa el botón de abajo. Se creará un canal privado ' +
+            'donde un administrador gestionará tu solicitud.\n\n' +
             '🚫 Atacar, robar o ser hostil mientras tienes la protección activa ' +
             'resulta en baneo inmediato — lee las normas en #normas.'
         )
@@ -64,7 +75,6 @@ function construirBotonSolicitar() {
     );
 }
 
-// Asegura que el mensaje fijo con botón existe (idempotente, igual que bienvenida)
 async function asegurarMensajeSolicitud(client) {
     if (!config.canales.bandera_blanca) {
         console.warn('[BB] Canal bandera_blanca no configurado en config.json');
@@ -123,11 +133,159 @@ function construirModalSolicitud() {
     return modal;
 }
 
+// --- EMBED Y BOTONES DEL CANAL PRIVADO ---
+
+function construirEmbedCanal(solicitud) {
+    const estados = {
+        pendiente: { emoji: '🟡', texto: 'PENDIENTE DE REVISIÓN', color: 0xF39C12 },
+        activo: { emoji: '🟢', texto: 'PROTECCIÓN ACTIVA', color: 0x2ECC71 },
+        denegado: { emoji: '🔴', texto: 'SOLICITUD DENEGADA', color: 0xE74C3C },
+        expirado: { emoji: '⚪', texto: 'PROTECCIÓN EXPIRADA', color: 0x95A5A6 }
+    };
+    const estado = estados[solicitud.estado] || estados.pendiente;
+
+    const embed = new EmbedBuilder()
+        .setTitle(`🏳️ Bandera Blanca — ${solicitud.nombreArk}`)
+        .setColor(estado.color)
+        .addFields(
+            { name: 'Estado', value: `${estado.emoji} ${estado.texto}`, inline: true },
+            { name: '👤 Discord', value: solicitud.discordUsername, inline: true },
+            { name: '🎮 Nombre ARK', value: solicitud.nombreArk, inline: true }
+        )
+        .setTimestamp(new Date(solicitud.fechaSolicitud));
+
+    if (solicitud.estado === 'activo' && solicitud.fechaExpiracion) {
+        embed.addFields({
+            name: '⏱️ Expira',
+            value: `<t:${Math.floor(new Date(solicitud.fechaExpiracion).getTime() / 1000)}:F> (<t:${Math.floor(new Date(solicitud.fechaExpiracion).getTime() / 1000)}:R>)`,
+            inline: false
+        });
+    }
+
+    if (solicitud.estado === 'pendiente') {
+        embed.setDescription(
+            'Comprobad que **está en superficie** (no en cueva) antes de activar.\n' +
+            'Entrad al juego y activad la protección, luego pulsad el botón de abajo.'
+        );
+    }
+
+    return embed;
+}
+
+function construirBotonesCanal(solicitud) {
+    if (solicitud.estado === 'pendiente') {
+        return [new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`bb_activar_${solicitud.id}`)
+                .setLabel('✅ Activar protección')
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId(`bb_denegar_cueva_${solicitud.id}`)
+                .setLabel('❌ Está en cueva')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId(`bb_denegar_repetida_${solicitud.id}`)
+                .setLabel('❌ Ya la usó antes')
+                .setStyle(ButtonStyle.Danger)
+        )];
+    }
+
+    if (solicitud.estado === 'activo') {
+        return [new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`bb_quitar_${solicitud.id}`)
+                .setLabel('🗑️ Quitar protección ahora')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId(`bb_cerrar_${solicitud.id}`)
+                .setLabel('🔒 Cerrar canal')
+                .setStyle(ButtonStyle.Secondary)
+        )];
+    }
+
+    // denegado o expirado
+    return [new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`bb_cerrar_${solicitud.id}`)
+            .setLabel('🔒 Cerrar canal')
+            .setStyle(ButtonStyle.Secondary)
+    )];
+}
+
+// --- CREAR CANAL PRIVADO ---
+
+async function crearCanalPrivado(interaction, client, solicitud) {
+    const guild = interaction.guild;
+    const categoria = config.canales.bandera_blanca
+        ? (await client.channels.fetch(config.canales.bandera_blanca)).parentId
+        : null;
+
+    const rolAdmin = guild.roles.cache.find(r => r.id === config.roles.admin);
+    const rolMod = guild.roles.cache.find(r => r.id === config.roles.moderador);
+
+    const overwrites = [
+        { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.EmbedLinks] }
+    ];
+
+    if (rolAdmin) overwrites.push({ id: rolAdmin.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
+    if (rolMod) overwrites.push({ id: rolMod.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
+
+    const nombreCanal = `bandera-${solicitud.nombreArk}`.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 90);
+
+    const canal = await guild.channels.create({
+        name: nombreCanal,
+        type: ChannelType.GuildText,
+        parent: categoria,
+        permissionOverwrites: overwrites,
+        topic: `Solicitud de Bandera Blanca de ${solicitud.nombreArk}`
+    });
+
+    return canal;
+}
+
 // --- GESTIÓN DE BOTONES ---
 
 async function handleButton(interaction, client) {
-    if (interaction.customId === 'bb_solicitar') {
+    const id = interaction.customId;
+
+    if (id === 'bb_solicitar') {
         await interaction.showModal(construirModalSolicitud());
+        return;
+    }
+
+    if (id.startsWith('bb_activar_')) {
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
+        const solicitudId = id.replace('bb_activar_', '');
+        await activarProteccion(interaction, client, null, solicitudId);
+        return;
+    }
+
+    if (id.startsWith('bb_denegar_cueva_')) {
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
+        const solicitudId = id.replace('bb_denegar_cueva_', '');
+        await denegarSolicitud(interaction, client, solicitudId, 'cueva');
+        return;
+    }
+
+    if (id.startsWith('bb_denegar_repetida_')) {
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
+        const solicitudId = id.replace('bb_denegar_repetida_', '');
+        await denegarSolicitud(interaction, client, solicitudId, 'repetida');
+        return;
+    }
+
+    if (id.startsWith('bb_quitar_')) {
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
+        const solicitudId = id.replace('bb_quitar_', '');
+        await quitarProteccionBoton(interaction, client, solicitudId);
+        return;
+    }
+
+    if (id.startsWith('bb_cerrar_')) {
+        if (!esAdmin(interaction)) return interaction.reply({ content: '⛔ Solo admins.', flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: '🔒 Cerrando canal en 5 segundos...', flags: MessageFlags.Ephemeral });
+        setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
         return;
     }
 }
@@ -147,80 +305,87 @@ async function handleModal(interaction, client) {
                 });
             }
 
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
             const bandera = cargarBandera();
 
-            // Comprobar si ya tiene una solicitud pendiente o activa
             const existente = Object.values(bandera).find(b =>
-                b.discordId === interaction.user.id && b.estado !== 'expirado'
+                b.discordId === interaction.user.id &&
+                (
+                    b.estado === 'pendiente' ||
+                    b.estado === 'activo' ||
+                    b.estado === 'expirado' ||
+                    (b.estado === 'denegado' && b.motivoDenegacion === 'repetida')
+                )
             );
             if (existente) {
-                return interaction.reply({
-                    content: `⚠️ Ya tienes una solicitud **${existente.estado}** registrada. Si crees que es un error, contacta con un admin.`,
-                    flags: MessageFlags.Ephemeral
-                });
+                const motivo = existente.estado === 'expirado'
+                    ? 'Ya usaste tu Bandera Blanca anteriormente — solo se puede solicitar una vez.'
+                    : existente.estado === 'denegado'
+                        ? 'Tu solicitud anterior fue denegada permanentemente. Contacta con un admin si crees que es un error.'
+                        : `Ya tienes una solicitud **${existente.estado}**. Revisa tu canal privado.`;
+                return interaction.editReply({ content: `⚠️ ${motivo}` });
             }
 
             const id = Date.now().toString();
-            bandera[id] = {
+            const solicitud = {
                 id,
                 discordId: interaction.user.id,
                 discordUsername: interaction.user.username,
                 nombreArk,
-                estado: 'pendiente', // pendiente -> activo -> expirado
+                estado: 'pendiente',
                 fechaSolicitud: new Date().toISOString(),
                 fechaActivacion: null,
-                fechaExpiracion: null
+                fechaExpiracion: null,
+                canalId: null
             };
+            bandera[id] = solicitud;
             guardarBandera(bandera);
 
-            // Avisar a #chat-admin
-            try {
-                const canalAdmin = await client.channels.fetch(config.canales.logs);
-                await canalAdmin.send({
-                    embeds: [
-                        new EmbedBuilder()
-                            .setTitle('🏳️ Nueva solicitud de Bandera Blanca')
-                            .setColor(0xF39C12)
-                            .addFields(
-                                { name: '👤 Discord', value: interaction.user.username, inline: true },
-                                { name: '🎮 Nombre ARK', value: nombreArk, inline: true }
-                            )
-                            .setDescription(
-                                `Entrad al juego y activad la protección para **${nombreArk}**.\n\n` +
-                                `Cuando esté hecho, confirmad con:\n\`/banderablanca activar nombre:${nombreArk}\``
-                            )
-                            .setTimestamp()
-                    ]
-                });
-            } catch (e) {
-                console.warn('[BB] No se pudo avisar en admin:', e.message);
-            }
+            // Crear canal privado
+            const canal = await crearCanalPrivado(interaction, client, solicitud);
+            bandera[id].canalId = canal.id;
+            guardarBandera(bandera);
 
-            await interaction.reply({
-                content: `✅ Solicitud enviada. Un administrador entrará al juego y activará tu protección de 72h lo antes posible. Te avisaremos.`,
-                flags: MessageFlags.Ephemeral
+            await canal.send({
+                content: `${interaction.user} — solicitud recibida.`,
+                embeds: [construirEmbedCanal(bandera[id])],
+                components: construirBotonesCanal(bandera[id])
+            });
+
+            await interaction.editReply({
+                content: `✅ Solicitud enviada. Un administrador la revisará y te avisaremos por privado en cuanto se active.`
             });
 
         } catch (error) {
             console.error('[BB] Error en solicitud:', error);
-            await interaction.reply({ content: `❌ Error: ${error.message}`, flags: MessageFlags.Ephemeral });
+            const msg = `❌ Error: ${error.message}`;
+            if (interaction.deferred) {
+                await interaction.editReply({ content: msg });
+            } else {
+                await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
+            }
         }
     }
 }
 
-// --- COMANDOS ADMIN ---
+// --- ACCIONES ---
 
-async function activarProteccion(interaction, client, nombreArk) {
+async function activarProteccion(interaction, client, nombreArkBuscado, solicitudIdDirecto) {
     const bandera = cargarBandera();
-    const solicitud = Object.values(bandera).find(b =>
-        b.nombreArk.toLowerCase() === nombreArk.toLowerCase() && b.estado === 'pendiente'
-    );
+    let solicitud;
 
-    if (!solicitud) {
-        return interaction.reply({
-            content: `❌ No hay ninguna solicitud pendiente para **${nombreArk}**. Comprueba el nombre exacto.`,
-            flags: MessageFlags.Ephemeral
-        });
+    if (solicitudIdDirecto) {
+        solicitud = bandera[solicitudIdDirecto];
+    } else {
+        solicitud = Object.values(bandera).find(b =>
+            b.nombreArk.toLowerCase() === nombreArkBuscado.toLowerCase() && b.estado === 'pendiente'
+        );
+    }
+
+    if (!solicitud || solicitud.estado !== 'pendiente') {
+        const msg = { content: `❌ No hay solicitud pendiente.`, flags: MessageFlags.Ephemeral };
+        return interaction.reply ? interaction.reply(msg) : null;
     }
 
     const ahora = new Date();
@@ -231,26 +396,138 @@ async function activarProteccion(interaction, client, nombreArk) {
     solicitud.fechaExpiracion = expiracion.toISOString();
     guardarBandera(bandera);
 
-    // Avisar al jugador por DM
+    // Actualizar el canal privado
+    if (solicitud.canalId) {
+        try {
+            const canal = await client.channels.fetch(solicitud.canalId);
+            await canal.send({
+                embeds: [construirEmbedCanal(solicitud)],
+                components: construirBotonesCanal(solicitud)
+            });
+        } catch (e) {
+            console.warn('[BB] No se pudo actualizar canal:', e.message);
+        }
+    }
+
+    // DM al jugador — si falla, avisar en el canal público como respaldo
+    let dmFallido = false;
     try {
         const usuario = await client.users.fetch(solicitud.discordId);
         await usuario.send({
             embeds: [
                 new EmbedBuilder()
-                    .setTitle('🏳️ ¡Tu Bandera Blanca está activa!')
+                    .setTitle('🏳️ ¡Tienes activada la Bandera Blanca!')
                     .setColor(0x2ECC71)
                     .setDescription(
-                        `Tu protección de **${DURACION_HORAS} horas** ya está activa.\n\n` +
+                        `Tu protección de **${DURACION_HORAS} horas** ya está activa, ¡juega tranquilo!\n\n` +
                         `Expira: <t:${Math.floor(expiracion.getTime() / 1000)}:F>\n\n` +
-                        `Recuerda: atacar a otros durante este periodo resulta en baneo inmediato.`
+                        `🚫 Recuerda: atacar o ser hostil con otros mientras tienes la protección resulta en baneo inmediato.`
                     )
             ]
-        }).catch(() => {});
-    } catch (e) {}
+        });
+    } catch (e) {
+        dmFallido = true;
+    }
 
-    await interaction.reply({
-        content: `✅ Protección activada para **${nombreArk}**. Expira <t:${Math.floor(expiracion.getTime() / 1000)}:R>.`,
+    if (dmFallido && solicitud.canalId) {
+        try {
+            const canalPrivado = await client.channels.fetch(solicitud.canalId);
+            await canalPrivado.permissionOverwrites.create(solicitud.discordId, {
+                ViewChannel: true,
+                ReadMessageHistory: true
+            });
+            await canalPrivado.send(
+                `<@${solicitud.discordId}> — no hemos podido enviarte un mensaje privado, ` +
+                `así que te hemos dado acceso aquí. Tu protección de **${DURACION_HORAS} horas** ya está activa. ` +
+                `Expira <t:${Math.floor(expiracion.getTime() / 1000)}:F>.`
+            );
+        } catch (e) {
+            console.warn('[BB] No se pudo avisar ni por DM ni dando acceso al canal:', e.message);
+        }
+    }
+
+    if (interaction.reply) {
+        await interaction.reply({ content: `✅ Protección activada para **${solicitud.nombreArk}**.` });
+    }
+}
+
+async function denegarSolicitud(interaction, client, solicitudId, motivo) {
+    const bandera = cargarBandera();
+    const solicitud = bandera[solicitudId];
+    if (!solicitud) return interaction.reply({ content: '❌ Solicitud no encontrada.', flags: MessageFlags.Ephemeral });
+
+    solicitud.estado = 'denegado';
+    solicitud.motivoDenegacion = motivo;
+    guardarBandera(bandera);
+
+    await interaction.update({
+        embeds: [construirEmbedCanal(solicitud)],
+        components: construirBotonesCanal(solicitud)
     });
+
+    const mensajes = {
+        cueva: '🔴 Tu solicitud de Bandera Blanca ha sido **denegada**.\n\nMotivo: estás escondido en una cueva. Esta protección es para jugadores en superficie jugando de forma normal, no para evitar el PvP escondiéndote.',
+        repetida: '🔴 Tu solicitud de Bandera Blanca ha sido **denegada**.\n\nMotivo: ya solicitaste esta protección anteriormente. La Bandera Blanca es solo para tus primeros días en el servidor, no se puede pedir más de una vez.'
+    };
+    const mensajeTexto = mensajes[motivo] || '🔴 Tu solicitud de Bandera Blanca ha sido denegada. Contacta con un admin si tienes dudas.';
+
+    let dmFallido = false;
+    try {
+        const usuario = await client.users.fetch(solicitud.discordId);
+        await usuario.send(mensajeTexto);
+    } catch (e) {
+        dmFallido = true;
+    }
+
+    if (dmFallido && solicitud.canalId) {
+        try {
+            const canalPrivado = await client.channels.fetch(solicitud.canalId);
+            await canalPrivado.permissionOverwrites.create(solicitud.discordId, {
+                ViewChannel: true,
+                ReadMessageHistory: true
+            });
+            await canalPrivado.send(`<@${solicitud.discordId}> — no hemos podido enviarte un privado, así que te hemos dado acceso aquí.\n${mensajeTexto}`);
+        } catch (e) {
+            console.warn('[BB] No se pudo avisar ni por DM ni dando acceso al canal:', e.message);
+        }
+    }
+}
+
+async function quitarProteccionBoton(interaction, client, solicitudId) {
+    const bandera = cargarBandera();
+    const solicitud = bandera[solicitudId];
+    if (!solicitud) return interaction.reply({ content: '❌ Solicitud no encontrada.', flags: MessageFlags.Ephemeral });
+
+    solicitud.estado = 'expirado';
+    guardarBandera(bandera);
+
+    await interaction.update({
+        embeds: [construirEmbedCanal(solicitud)],
+        components: construirBotonesCanal(solicitud)
+    });
+}
+
+async function quitarProteccion(interaction, client, nombreArk) {
+    const bandera = cargarBandera();
+    const solicitud = Object.values(bandera).find(b =>
+        b.nombreArk.toLowerCase() === nombreArk.toLowerCase() && b.estado === 'activo'
+    );
+
+    if (!solicitud) {
+        return interaction.reply({ content: `❌ No hay protección activa para **${nombreArk}**.`, flags: MessageFlags.Ephemeral });
+    }
+
+    solicitud.estado = 'expirado';
+    guardarBandera(bandera);
+
+    if (solicitud.canalId) {
+        try {
+            const canal = await client.channels.fetch(solicitud.canalId);
+            await canal.send({ embeds: [construirEmbedCanal(solicitud)], components: construirBotonesCanal(solicitud) });
+        } catch (e) {}
+    }
+
+    await interaction.reply({ content: `✅ Protección de **${nombreArk}** retirada manualmente.` });
 }
 
 async function verProtecciones(interaction) {
@@ -264,44 +541,25 @@ async function verProtecciones(interaction) {
 
     if (pendientes.length > 0) {
         embed.addFields({
-            name: `⏳ Pendientes de activar (${pendientes.length})`,
-            value: pendientes.map(p => `**${p.nombreArk}** — solicitado ${new Date(p.fechaSolicitud).toLocaleString('es-ES')}`).join('\n'),
+            name: `⏳ Pendientes (${pendientes.length})`,
+            value: pendientes.map(p => `**${p.nombreArk}** — <#${p.canalId}>`).join('\n'),
             inline: false
         });
     }
 
     if (activos.length > 0) {
         embed.addFields({
-            name: `🟢 Activas ahora (${activos.length})`,
+            name: `🟢 Activas (${activos.length})`,
             value: activos.map(a => `**${a.nombreArk}** — expira <t:${Math.floor(new Date(a.fechaExpiracion).getTime() / 1000)}:R>`).join('\n'),
             inline: false
         });
     }
 
     if (pendientes.length === 0 && activos.length === 0) {
-        embed.setDescription('No hay ninguna solicitud pendiente ni protección activa ahora mismo.');
+        embed.setDescription('No hay solicitudes pendientes ni protecciones activas.');
     }
 
-    await interaction.reply({ embeds: [embed], flags: require('discord.js').MessageFlags.Ephemeral });
-}
-
-async function quitarProteccion(interaction, client, nombreArk) {
-    const bandera = cargarBandera();
-    const solicitud = Object.values(bandera).find(b =>
-        b.nombreArk.toLowerCase() === nombreArk.toLowerCase() && b.estado === 'activo'
-    );
-
-    if (!solicitud) {
-        return interaction.reply({
-            content: `❌ No hay ninguna protección activa para **${nombreArk}**.`,
-            flags: require('discord.js').MessageFlags.Ephemeral
-        });
-    }
-
-    solicitud.estado = 'expirado';
-    guardarBandera(bandera);
-
-    await interaction.reply({ content: `✅ Protección de **${nombreArk}** retirada manualmente.` });
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }
 
 // --- COMPROBACIÓN AUTOMÁTICA DE EXPIRACIÓN ---
@@ -316,24 +574,35 @@ async function comprobarExpiraciones(client) {
             solicitud.estado = 'expirado';
             huboCambios = true;
 
-            try {
-                const canalAdmin = await client.channels.fetch(config.canales.logs);
-                await canalAdmin.send({
-                    embeds: [
-                        new EmbedBuilder()
-                            .setTitle('⏰ Bandera Blanca expirada')
-                            .setColor(0xE74C3C)
-                            .setDescription(`La protección de **${solicitud.nombreArk}** ha expirado. Si seguía activa en el juego, desactivadla.`)
-                    ]
-                });
-            } catch (e) {}
+            if (solicitud.canalId) {
+                try {
+                    const canal = await client.channels.fetch(solicitud.canalId);
+                    await canal.send({
+                        content: '⏰ La protección ha expirado automáticamente.',
+                        embeds: [construirEmbedCanal(solicitud)],
+                        components: construirBotonesCanal(solicitud)
+                    });
+                } catch (e) {}
+            }
 
+            let dmFallido = false;
             try {
                 const usuario = await client.users.fetch(solicitud.discordId);
-                await usuario.send({
-                    content: `🏳️ Tu protección de Bandera Blanca ha expirado. ¡Ya formas parte del PvP normal del servidor!`
-                }).catch(() => {});
-            } catch (e) {}
+                await usuario.send(`🏳️ Tu protección de Bandera Blanca ha expirado. ¡Ya formas parte del PvP normal del servidor!`);
+            } catch (e) {
+                dmFallido = true;
+            }
+
+            if (dmFallido && solicitud.canalId) {
+                try {
+                    const canalPrivado = await client.channels.fetch(solicitud.canalId);
+                    await canalPrivado.permissionOverwrites.create(solicitud.discordId, {
+                        ViewChannel: true,
+                        ReadMessageHistory: true
+                    });
+                    await canalPrivado.send(`<@${solicitud.discordId}> — tu protección de Bandera Blanca ha expirado. ¡Ya formas parte del PvP normal del servidor!`);
+                } catch (e) {}
+            }
         }
     }
 
@@ -341,7 +610,7 @@ async function comprobarExpiraciones(client) {
 }
 
 function iniciarComprobacionExpiraciones(client) {
-    setInterval(() => comprobarExpiraciones(client), 5 * 60 * 1000); // cada 5 minutos
+    setInterval(() => comprobarExpiraciones(client), 5 * 60 * 1000);
     comprobarExpiraciones(client);
 }
 
