@@ -40,11 +40,12 @@ const MINUTOS_REINICIO_NORMAL = 8;
 
 // --- RCON ---
 
-async function ejecutarComandoRcon(comando) {
+async function ejecutarComandoRcon(comando, timeout = 8000) {
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
+            conn.disconnect();
             reject(new Error('Timeout RCON'));
-        }, 5000);
+        }, timeout);
 
         const conn = new Rcon(config.rcon.ip, config.rcon.port, config.rcon.password);
 
@@ -67,6 +68,10 @@ async function ejecutarComandoRcon(comando) {
     });
 }
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function consultarServidor() {
     if (!config.rcon.ip || !config.rcon.password) return null;
 
@@ -83,6 +88,7 @@ async function consultarServidor() {
         // 2. ListOnlinePlayers → Character Name por EOS ID
         let mapaCharNames = {};
         try {
+            await sleep(500);
             const respOnlinePlayers = await ejecutarComandoRcon('ListOnlinePlayers');
             mapaCharNames = parsearOnlinePlayers(respOnlinePlayers);
         } catch (e) {
@@ -92,6 +98,7 @@ async function consultarServidor() {
         // 3. ListOnlineTribes → Tribe Name por Tribe ID
         let mapaTribes = {};
         try {
+            await sleep(500);
             const respOnlineTribes = await ejecutarComandoRcon('ListOnlineTribes');
             mapaTribes = parsearOnlineTribes(respOnlineTribes);
         } catch (e) {
@@ -108,6 +115,7 @@ async function consultarServidor() {
             // Tribe Name
             if (jugador.eosId) {
                 try {
+                    await sleep(300);
                     const respTribeId = await ejecutarComandoRcon(`GetTribeIdOfPlayer ${jugador.eosId}`);
                     const matchTribe = respTribeId.match(/Tribe ID:\s*(\d+)/i);
                     if (matchTribe && mapaTribes[matchTribe[1]]) {
