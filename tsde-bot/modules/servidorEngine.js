@@ -40,51 +40,14 @@ const MINUTOS_REINICIO_NORMAL = 8;
 
 // --- RCON ---
 
-async function ejecutarComandosRcon(comandos) {
-    return new Promise((resolve, reject) => {
-        const resultados = [];
-        let indice = 0;
-
-        const timer = setTimeout(() => {
-            conn.disconnect();
-            reject(new Error('Timeout RCON'));
-        }, 15000);
-
-        const conn = new Rcon(config.rcon.ip, config.rcon.port, config.rcon.password);
-
-        conn.on('auth', () => {
-            conn.send(comandos[indice]);
-        });
-
-        conn.on('response', (str) => {
-            resultados.push(str);
-            indice++;
-            if (indice < comandos.length) {
-                conn.send(comandos[indice]);
-            } else {
-                clearTimeout(timer);
-                conn.disconnect();
-                resolve(resultados);
-            }
-        });
-
-        conn.on('error', (err) => {
-            clearTimeout(timer);
-            reject(err);
-        });
-
-        conn.connect();
-    });
-}
-
 async function ejecutarComandoRcon(comando, timeout = 8000) {
     return new Promise((resolve, reject) => {
+        const conn = new Rcon(config.rcon.ip, config.rcon.port, config.rcon.password);
+
         const timer = setTimeout(() => {
-            conn.disconnect();
+            try { conn.disconnect(); } catch(e) {}
             reject(new Error('Timeout RCON'));
         }, timeout);
-
-        const conn = new Rcon(config.rcon.ip, config.rcon.port, config.rcon.password);
 
         conn.on('auth', () => {
             conn.send(comando);
@@ -92,7 +55,7 @@ async function ejecutarComandoRcon(comando, timeout = 8000) {
 
         conn.on('response', (str) => {
             clearTimeout(timer);
-            conn.disconnect();
+            try { conn.disconnect(); } catch(e) {}
             resolve(str);
         });
 
@@ -113,27 +76,36 @@ async function consultarServidor() {
     if (!config.rcon.ip || !config.rcon.password) return null;
 
     try {
-        // Una sola conexión RCON para ListPlayers + ListOnlinePlayers + ListOnlineTribes
-        let resultados;
-        try {
-            resultados = await ejecutarComandosRcon(['ListPlayers', 'ListOnlinePlayers', 'ListOnlineTribes']);
-        } catch (e) {
-            console.log(`[SRV] Servidor no responde: ${e.message}`);
-            return { online: false, jugadores: [] };
-        }
-
-        const [respListPlayers, respOnlinePlayers, respOnlineTribes] = resultados;
+        // 1. ListPlayers → EOS Name + EOS ID (conexión base que siempre funcionó)
+        const respListPlayers = await ejecutarComandoRcon('ListPlayers');
         console.log(`[SRV] Respuesta RCON raw: "${respListPlayers}"`);
-
         const jugadores = parsearJugadores(respListPlayers);
+
         if (jugadores.length === 0) {
             return { online: true, jugadores: [] };
         }
 
-        const mapaCharNames = parsearOnlinePlayers(respOnlinePlayers || '');
-        const mapaTribes = parsearOnlineTribes(respOnlineTribes || '');
+        // 2. ListOnlinePlayers → Character Name (conexión separada con delay)
+        let mapaCharNames = {};
+        try {
+            await sleep(1000);
+            const respOnlinePlayers = await ejecutarComandoRcon('ListOnlinePlayers', 10000);
+            mapaCharNames = parsearOnlinePlayers(respOnlinePlayers);
+        } catch (e) {
+            console.warn('[SRV] ListOnlinePlayers falló:', e.message);
+        }
 
-        // Para la tribu necesitamos GetTribeIdOfPlayer por jugador — conexión aparte
+        // 3. ListOnlineTribes → Tribe Name (conexión separada con delay)
+        let mapaTribes = {};
+        try {
+            await sleep(1000);
+            const respOnlineTribes = await ejecutarComandoRcon('ListOnlineTribes', 10000);
+            mapaTribes = parsearOnlineTribes(respOnlineTribes);
+        } catch (e) {
+            console.warn('[SRV] ListOnlineTribes falló:', e.message);
+        }
+
+        // 4. Cruzar datos
         for (const jugador of jugadores) {
             if (jugador.eosId && mapaCharNames[jugador.eosId]) {
                 jugador.charName = mapaCharNames[jugador.eosId];
@@ -141,20 +113,19 @@ async function consultarServidor() {
 
             if (jugador.eosId) {
                 try {
-                    const respTribeId = await ejecutarComandoRcon(`GetTribeIdOfPlayer ${jugador.eosId}`);
+                    await sleep(500);
+                    const respTribeId = await ejecutarComandoRcon(`GetTribeIdOfPlayer ${jugador.eosId}`, 8000);
                     const matchTribe = respTribeId.match(/Tribe ID:\s*(\d+)/i);
                     if (matchTribe && mapaTribes[matchTribe[1]]) {
                         jugador.tribeName = mapaTribes[matchTribe[1]];
                     }
-                } catch (e) {
-                    // Si falla para un jugador concreto, seguimos
-                }
+                } catch (e) {}
             }
         }
 
         return { online: true, jugadores };
     } catch (error) {
-        console.log(`[SRV] Error consultando servidor: ${error.message}`);
+        console.log(`[SRV] Servidor no responde: ${error.message}`);
         return { online: false, jugadores: [] };
     }
 }
