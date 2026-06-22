@@ -71,9 +71,54 @@ async function consultarServidor() {
     if (!config.rcon.ip || !config.rcon.password) return null;
 
     try {
-        const respuesta = await ejecutarComandoRcon('ListPlayers');
-        console.log(`[SRV] Respuesta RCON raw: "${respuesta}"`);
-        const jugadores = parsearJugadores(respuesta);
+        // 1. ListPlayers → EOS Name + EOS ID
+        const respListPlayers = await ejecutarComandoRcon('ListPlayers');
+        console.log(`[SRV] Respuesta RCON raw: "${respListPlayers}"`);
+        const jugadores = parsearJugadores(respListPlayers);
+
+        if (jugadores.length === 0) {
+            return { online: true, jugadores: [] };
+        }
+
+        // 2. ListOnlinePlayers → Character Name por EOS ID
+        let mapaCharNames = {};
+        try {
+            const respOnlinePlayers = await ejecutarComandoRcon('ListOnlinePlayers');
+            mapaCharNames = parsearOnlinePlayers(respOnlinePlayers);
+        } catch (e) {
+            console.warn('[SRV] ListOnlinePlayers falló:', e.message);
+        }
+
+        // 3. ListOnlineTribes → Tribe Name por Tribe ID
+        let mapaTribes = {};
+        try {
+            const respOnlineTribes = await ejecutarComandoRcon('ListOnlineTribes');
+            mapaTribes = parsearOnlineTribes(respOnlineTribes);
+        } catch (e) {
+            console.warn('[SRV] ListOnlineTribes falló:', e.message);
+        }
+
+        // 4. GetTribeIdOfPlayer por cada jugador → cruzar con mapaTribes
+        for (const jugador of jugadores) {
+            // Character Name
+            if (jugador.eosId && mapaCharNames[jugador.eosId]) {
+                jugador.charName = mapaCharNames[jugador.eosId];
+            }
+
+            // Tribe Name
+            if (jugador.eosId) {
+                try {
+                    const respTribeId = await ejecutarComandoRcon(`GetTribeIdOfPlayer ${jugador.eosId}`);
+                    const matchTribe = respTribeId.match(/Tribe ID:\s*(\d+)/i);
+                    if (matchTribe && mapaTribes[matchTribe[1]]) {
+                        jugador.tribeName = mapaTribes[matchTribe[1]];
+                    }
+                } catch (e) {
+                    // Si falla para un jugador, seguimos con el siguiente
+                }
+            }
+        }
+
         return { online: true, jugadores };
     } catch (error) {
         console.log(`[SRV] Servidor no responde: ${error.message}`);
@@ -100,20 +145,48 @@ function parsearJugadores(respuesta) {
         const limpia = linea.trim();
         if (!limpia) continue;
 
-        const match = limpia.match(/^\d+\.\s+(.+?),\s*\d+/);
+        const match = limpia.match(/^\d+\.\s+(.+?),\s*([a-f0-9]+)\s*$/i);
         if (match) {
-            jugadores.push(match[1].trim());
+            jugadores.push({ nombre: match[1].trim(), eosId: match[2].trim() });
             continue;
         }
 
         const match2 = limpia.match(/^\d+\.\s+(.+)$/);
         if (match2) {
             const nombre = match2[1].replace(/,.*$/, '').trim();
-            if (nombre) jugadores.push(nombre);
+            if (nombre) jugadores.push({ nombre, eosId: null });
         }
     }
 
     return jugadores;
+}
+
+// Parsea ListOnlinePlayers → { eosId: characterName }
+function parsearOnlinePlayers(respuesta) {
+    const mapa = {};
+    if (!respuesta) return mapa;
+    for (const linea of respuesta.split('\n')) {
+        // Formato: [Yeti]: 0002d98bfb3c480a9ca4c070257357cb
+        const match = linea.trim().match(/^\[(.+?)\]:\s*([a-f0-9]+)\s*$/i);
+        if (match) {
+            mapa[match[2].trim()] = match[1].trim();
+        }
+    }
+    return mapa;
+}
+
+// Parsea ListOnlineTribes → { tribeId: tribeName }
+function parsearOnlineTribes(respuesta) {
+    const mapa = {};
+    if (!respuesta) return mapa;
+    for (const linea of respuesta.split('\n')) {
+        // Formato: [TSDE - ADMIN]: 1803946148
+        const match = linea.trim().match(/^\[(.+?)\]:\s*(\d+)\s*$/);
+        if (match) {
+            mapa[match[2].trim()] = match[1].trim();
+        }
+    }
+    return mapa;
 }
 
 // --- EMBEDS ---
@@ -175,12 +248,12 @@ function construirEmbedJugadores(info) {
     }
 
     const lista = info.jugadores.map((j, i) => {
-        const registrado = buscarJugadorRegistrado(j);
-        if (registrado) {
-            const nombrePersonaje = registrado.nombrePersonaje ? ` (${registrado.nombrePersonaje})` : '';
-            return `${i + 1}. 🦖 **${j}**${nombrePersonaje} — <@${registrado.discordId}>`;
-        }
-        return `${i + 1}. 🦖 **${j}** — *sin registrar*`;
+        const registrado = buscarJugadorRegistrado(j.nombre);
+        const charName = j.charName || registrado?.nombrePersonaje || null;
+        const tribu = j.tribeName ? ` [${j.tribeName}]` : '';
+        const charStr = charName ? ` (${charName})` : '';
+        const discordStr = registrado ? ` — <@${registrado.discordId}>` : '';
+        return `${i + 1}. 🦖 **${j.nombre}**${charStr}${tribu}${discordStr}`;
     }).join('\n');
     embed.setDescription(lista);
     embed.addFields(
