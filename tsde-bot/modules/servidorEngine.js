@@ -40,6 +40,43 @@ const MINUTOS_REINICIO_NORMAL = 8;
 
 // --- RCON ---
 
+async function ejecutarComandosRcon(comandos) {
+    return new Promise((resolve, reject) => {
+        const resultados = [];
+        let indice = 0;
+
+        const timer = setTimeout(() => {
+            conn.disconnect();
+            reject(new Error('Timeout RCON'));
+        }, 15000);
+
+        const conn = new Rcon(config.rcon.ip, config.rcon.port, config.rcon.password);
+
+        conn.on('auth', () => {
+            conn.send(comandos[indice]);
+        });
+
+        conn.on('response', (str) => {
+            resultados.push(str);
+            indice++;
+            if (indice < comandos.length) {
+                conn.send(comandos[indice]);
+            } else {
+                clearTimeout(timer);
+                conn.disconnect();
+                resolve(resultados);
+            }
+        });
+
+        conn.on('error', (err) => {
+            clearTimeout(timer);
+            reject(err);
+        });
+
+        conn.connect();
+    });
+}
+
 async function ejecutarComandoRcon(comando, timeout = 8000) {
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -76,60 +113,48 @@ async function consultarServidor() {
     if (!config.rcon.ip || !config.rcon.password) return null;
 
     try {
-        // 1. ListPlayers → EOS Name + EOS ID
-        const respListPlayers = await ejecutarComandoRcon('ListPlayers');
-        console.log(`[SRV] Respuesta RCON raw: "${respListPlayers}"`);
-        const jugadores = parsearJugadores(respListPlayers);
+        // Una sola conexión RCON para ListPlayers + ListOnlinePlayers + ListOnlineTribes
+        let resultados;
+        try {
+            resultados = await ejecutarComandosRcon(['ListPlayers', 'ListOnlinePlayers', 'ListOnlineTribes']);
+        } catch (e) {
+            console.log(`[SRV] Servidor no responde: ${e.message}`);
+            return { online: false, jugadores: [] };
+        }
 
+        const [respListPlayers, respOnlinePlayers, respOnlineTribes] = resultados;
+        console.log(`[SRV] Respuesta RCON raw: "${respListPlayers}"`);
+
+        const jugadores = parsearJugadores(respListPlayers);
         if (jugadores.length === 0) {
             return { online: true, jugadores: [] };
         }
 
-        // 2. ListOnlinePlayers → Character Name por EOS ID
-        let mapaCharNames = {};
-        try {
-            await sleep(500);
-            const respOnlinePlayers = await ejecutarComandoRcon('ListOnlinePlayers');
-            mapaCharNames = parsearOnlinePlayers(respOnlinePlayers);
-        } catch (e) {
-            console.warn('[SRV] ListOnlinePlayers falló:', e.message);
-        }
+        const mapaCharNames = parsearOnlinePlayers(respOnlinePlayers || '');
+        const mapaTribes = parsearOnlineTribes(respOnlineTribes || '');
 
-        // 3. ListOnlineTribes → Tribe Name por Tribe ID
-        let mapaTribes = {};
-        try {
-            await sleep(500);
-            const respOnlineTribes = await ejecutarComandoRcon('ListOnlineTribes');
-            mapaTribes = parsearOnlineTribes(respOnlineTribes);
-        } catch (e) {
-            console.warn('[SRV] ListOnlineTribes falló:', e.message);
-        }
-
-        // 4. GetTribeIdOfPlayer por cada jugador → cruzar con mapaTribes
+        // Para la tribu necesitamos GetTribeIdOfPlayer por jugador — conexión aparte
         for (const jugador of jugadores) {
-            // Character Name
             if (jugador.eosId && mapaCharNames[jugador.eosId]) {
                 jugador.charName = mapaCharNames[jugador.eosId];
             }
 
-            // Tribe Name
             if (jugador.eosId) {
                 try {
-                    await sleep(300);
                     const respTribeId = await ejecutarComandoRcon(`GetTribeIdOfPlayer ${jugador.eosId}`);
                     const matchTribe = respTribeId.match(/Tribe ID:\s*(\d+)/i);
                     if (matchTribe && mapaTribes[matchTribe[1]]) {
                         jugador.tribeName = mapaTribes[matchTribe[1]];
                     }
                 } catch (e) {
-                    // Si falla para un jugador, seguimos con el siguiente
+                    // Si falla para un jugador concreto, seguimos
                 }
             }
         }
 
         return { online: true, jugadores };
     } catch (error) {
-        console.log(`[SRV] Servidor no responde: ${error.message}`);
+        console.log(`[SRV] Error consultando servidor: ${error.message}`);
         return { online: false, jugadores: [] };
     }
 }
