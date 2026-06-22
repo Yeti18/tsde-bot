@@ -76,28 +76,9 @@ async function consultarServidor() {
     if (!config.rcon.ip || !config.rcon.password) return null;
 
     try {
-        // ListAllPlayerEOSId → CharacterName + EOS ID en un solo comando
-        const respuesta = await ejecutarComandoRcon('ListAllPlayerEOSId');
+        const respuesta = await ejecutarComandoRcon('ListPlayers');
         console.log(`[SRV] Respuesta RCON raw: "${respuesta}"`);
         const jugadores = parsearJugadores(respuesta);
-
-        // ListPlayers → EOS Name (Gamertag) para cruzar con EOS ID
-        if (jugadores.length > 0) {
-            try {
-                const respListPlayers = await ejecutarComandoRcon('ListPlayers', 8000);
-                const lineas = respListPlayers.trim().split('\n');
-                for (const linea of lineas) {
-                    const match = linea.trim().match(/^\d+\.\s+(.+?),\s*([a-f0-9]+)\s*$/i);
-                    if (match) {
-                        const jugador = jugadores.find(j => j.eosId === match[2].trim());
-                        if (jugador) jugador.nombre = match[1].trim();
-                    }
-                }
-            } catch (e) {
-                console.warn('[SRV] ListPlayers falló:', e.message);
-            }
-        }
-
         return { online: true, jugadores };
     } catch (error) {
         console.log(`[SRV] Servidor no responde: ${error.message}`);
@@ -124,18 +105,16 @@ function parsearJugadores(respuesta) {
         const limpia = linea.trim();
         if (!limpia) continue;
 
-        // Formato ListAllPlayerEOSId: Yeti [PrimalPlayerDataBP_C_XXX]: 0002d98bfb3c480a9ca4c070257357cb
-        const matchExt = limpia.match(/^(.+?)\s*\[.+?\]:\s*([a-f0-9]+)\s*$/i);
-        if (matchExt) {
-            jugadores.push({ charName: matchExt[1].trim(), eosId: matchExt[2].trim() });
+        const match = limpia.match(/^\d+\.\s+(.+?),\s*([a-f0-9]+)\s*$/i);
+        if (match) {
+            jugadores.push({ nombre: match[1].trim(), eosId: match[2].trim() });
             continue;
         }
 
-        // Formato ListPlayers fallback: 0. SqualidYeti124, 0002d98bfb3c480a9ca4c070257357cb
-        const matchBasic = limpia.match(/^\d+\.\s+(.+?),\s*([a-f0-9]+)\s*$/i);
-        if (matchBasic) {
-            jugadores.push({ charName: null, eosId: matchBasic[2].trim(), nombre: matchBasic[1].trim() });
-            continue;
+        const match2 = limpia.match(/^\d+\.\s+(.+)$/);
+        if (match2) {
+            const nombre = match2[1].replace(/,.*$/, '').trim();
+            if (nombre) jugadores.push({ nombre, eosId: null });
         }
     }
 
@@ -201,11 +180,11 @@ function construirEmbedJugadores(info) {
     }
 
     const lista = info.jugadores.map((j, i) => {
-        const eosName = j.nombre || j.eosId || '?';
-        const charStr = j.charName ? ` (${j.charName})` : '';
-        const registrado = j.nombre ? buscarJugadorRegistrado(j.nombre) : null;
-        const discordStr = registrado ? ` — ${registrado.discordUsername}` : '';
-        return `${i + 1}. 🦖 **${eosName}**${charStr}${discordStr}`;
+        const registrado = buscarJugadorRegistrado(j.nombre);
+        if (registrado) {
+            return `${i + 1}. 🦖 **${j.nombre}** — ${registrado.discordUsername}`;
+        }
+        return `${i + 1}. 🦖 **${j.nombre}**`;
     }).join('\n');
     embed.setDescription(lista);
     embed.addFields(
