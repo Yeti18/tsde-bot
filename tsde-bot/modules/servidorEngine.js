@@ -76,50 +76,25 @@ async function consultarServidor() {
     if (!config.rcon.ip || !config.rcon.password) return null;
 
     try {
-        // 1. ListPlayers → EOS Name + EOS ID (conexión base que siempre funcionó)
-        const respListPlayers = await ejecutarComandoRcon('ListPlayers');
-        console.log(`[SRV] Respuesta RCON raw: "${respListPlayers}"`);
-        const jugadores = parsearJugadores(respListPlayers);
+        // ListAllPlayerEOSId → CharacterName + EOS ID en un solo comando
+        const respuesta = await ejecutarComandoRcon('ListAllPlayerEOSId');
+        console.log(`[SRV] Respuesta RCON raw: "${respuesta}"`);
+        const jugadores = parsearJugadores(respuesta);
 
-        if (jugadores.length === 0) {
-            return { online: true, jugadores: [] };
-        }
-
-        // 2. ListOnlinePlayers → Character Name (conexión separada con delay)
-        let mapaCharNames = {};
-        try {
-            await sleep(1000);
-            const respOnlinePlayers = await ejecutarComandoRcon('ListOnlinePlayers', 10000);
-            mapaCharNames = parsearOnlinePlayers(respOnlinePlayers);
-        } catch (e) {
-            console.warn('[SRV] ListOnlinePlayers falló:', e.message);
-        }
-
-        // 3. ListOnlineTribes → Tribe Name (conexión separada con delay)
-        let mapaTribes = {};
-        try {
-            await sleep(1000);
-            const respOnlineTribes = await ejecutarComandoRcon('ListOnlineTribes', 10000);
-            mapaTribes = parsearOnlineTribes(respOnlineTribes);
-        } catch (e) {
-            console.warn('[SRV] ListOnlineTribes falló:', e.message);
-        }
-
-        // 4. Cruzar datos
-        for (const jugador of jugadores) {
-            if (jugador.eosId && mapaCharNames[jugador.eosId]) {
-                jugador.charName = mapaCharNames[jugador.eosId];
-            }
-
-            if (jugador.eosId) {
-                try {
-                    await sleep(500);
-                    const respTribeId = await ejecutarComandoRcon(`GetTribeIdOfPlayer ${jugador.eosId}`, 8000);
-                    const matchTribe = respTribeId.match(/Tribe ID:\s*(\d+)/i);
-                    if (matchTribe && mapaTribes[matchTribe[1]]) {
-                        jugador.tribeName = mapaTribes[matchTribe[1]];
+        // ListPlayers → EOS Name (Gamertag) para cruzar con EOS ID
+        if (jugadores.length > 0) {
+            try {
+                const respListPlayers = await ejecutarComandoRcon('ListPlayers', 8000);
+                const lineas = respListPlayers.trim().split('\n');
+                for (const linea of lineas) {
+                    const match = linea.trim().match(/^\d+\.\s+(.+?),\s*([a-f0-9]+)\s*$/i);
+                    if (match) {
+                        const jugador = jugadores.find(j => j.eosId === match[2].trim());
+                        if (jugador) jugador.nombre = match[1].trim();
                     }
-                } catch (e) {}
+                }
+            } catch (e) {
+                console.warn('[SRV] ListPlayers falló:', e.message);
             }
         }
 
@@ -149,48 +124,22 @@ function parsearJugadores(respuesta) {
         const limpia = linea.trim();
         if (!limpia) continue;
 
-        const match = limpia.match(/^\d+\.\s+(.+?),\s*([a-f0-9]+)\s*$/i);
-        if (match) {
-            jugadores.push({ nombre: match[1].trim(), eosId: match[2].trim() });
+        // Formato ListAllPlayerEOSId: Yeti [PrimalPlayerDataBP_C_XXX]: 0002d98bfb3c480a9ca4c070257357cb
+        const matchExt = limpia.match(/^(.+?)\s*\[.+?\]:\s*([a-f0-9]+)\s*$/i);
+        if (matchExt) {
+            jugadores.push({ charName: matchExt[1].trim(), eosId: matchExt[2].trim() });
             continue;
         }
 
-        const match2 = limpia.match(/^\d+\.\s+(.+)$/);
-        if (match2) {
-            const nombre = match2[1].replace(/,.*$/, '').trim();
-            if (nombre) jugadores.push({ nombre, eosId: null });
+        // Formato ListPlayers fallback: 0. SqualidYeti124, 0002d98bfb3c480a9ca4c070257357cb
+        const matchBasic = limpia.match(/^\d+\.\s+(.+?),\s*([a-f0-9]+)\s*$/i);
+        if (matchBasic) {
+            jugadores.push({ charName: null, eosId: matchBasic[2].trim(), nombre: matchBasic[1].trim() });
+            continue;
         }
     }
 
     return jugadores;
-}
-
-// Parsea ListOnlinePlayers → { eosId: characterName }
-function parsearOnlinePlayers(respuesta) {
-    const mapa = {};
-    if (!respuesta) return mapa;
-    for (const linea of respuesta.split('\n')) {
-        // Formato: [Yeti]: 0002d98bfb3c480a9ca4c070257357cb
-        const match = linea.trim().match(/^\[(.+?)\]:\s*([a-f0-9]+)\s*$/i);
-        if (match) {
-            mapa[match[2].trim()] = match[1].trim();
-        }
-    }
-    return mapa;
-}
-
-// Parsea ListOnlineTribes → { tribeId: tribeName }
-function parsearOnlineTribes(respuesta) {
-    const mapa = {};
-    if (!respuesta) return mapa;
-    for (const linea of respuesta.split('\n')) {
-        // Formato: [TSDE - ADMIN]: 1803946148
-        const match = linea.trim().match(/^\[(.+?)\]:\s*(\d+)\s*$/);
-        if (match) {
-            mapa[match[2].trim()] = match[1].trim();
-        }
-    }
-    return mapa;
 }
 
 // --- EMBEDS ---
@@ -252,12 +201,11 @@ function construirEmbedJugadores(info) {
     }
 
     const lista = info.jugadores.map((j, i) => {
-        const registrado = buscarJugadorRegistrado(j.nombre);
-        const charName = j.charName || registrado?.nombrePersonaje || null;
-        const tribu = j.tribeName ? ` [${j.tribeName}]` : '';
-        const charStr = charName ? ` (${charName})` : '';
-        const discordStr = registrado ? ` — <@${registrado.discordId}>` : '';
-        return `${i + 1}. 🦖 **${j.nombre}**${charStr}${tribu}${discordStr}`;
+        const eosName = j.nombre || j.eosId || '?';
+        const charStr = j.charName ? ` (${j.charName})` : '';
+        const registrado = j.nombre ? buscarJugadorRegistrado(j.nombre) : null;
+        const discordStr = registrado ? ` — ${registrado.discordUsername}` : '';
+        return `${i + 1}. 🦖 **${eosName}**${charStr}${discordStr}`;
     }).join('\n');
     embed.setDescription(lista);
     embed.addFields(
