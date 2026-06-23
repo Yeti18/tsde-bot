@@ -79,9 +79,21 @@ async function consultarServidor() {
         const respuesta = await ejecutarComandoRcon('ListPlayers');
         console.log(`[SRV] Respuesta RCON raw: "${respuesta}"`);
         const jugadores = parsearJugadores(respuesta);
+        // Guardar en DB para que el endpoint HTTP de la web lo pueda leer
+        try {
+            const db = JSON.parse(fs.readFileSync('./database.json', 'utf8'));
+            db.jugadores_online = jugadores.map(j => j.nombre || j);
+            fs.writeFileSync('./database.json', JSON.stringify(db, null, 2));
+        } catch (e) {}
+
         return { online: true, jugadores };
     } catch (error) {
         console.log(`[SRV] Servidor no responde: ${error.message}`);
+        try {
+            const db = JSON.parse(fs.readFileSync('./database.json', 'utf8'));
+            db.jugadores_online = [];
+            fs.writeFileSync('./database.json', JSON.stringify(db, null, 2));
+        } catch (e) {}
         return { online: false, jugadores: [] };
     }
 }
