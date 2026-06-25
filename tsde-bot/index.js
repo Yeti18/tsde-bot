@@ -27,7 +27,7 @@ for (const file of handlerFiles) {
 // --- SERVIDOR HTTP PARA LA WEB DE DONACIONES ---
 // Expone el número de jugadores online sin tokens ni datos sensibles
 
-const HTTP_PORT = 80;
+const HTTP_PORT = 3000;
 
 http.createServer((req, res) => {
     // CORS para que la web pueda consultarlo desde cualquier dominio
