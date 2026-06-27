@@ -33,10 +33,15 @@ function construirEmbedsNormasCanal() {
                 name: '🌐 GENERALES',
                 value: [
                     '**Nombres** — Nombres genéricos como "Humano" o "Bob" serán baneados sin aviso.',
+                    '',
                     '**Respeto** — Insultos, faltas de respeto o acoso en cualquier canal = baneo inmediato.',
+                    '',
                     '**Publicidad** — Prohibida la publicidad de otros servidores o webs. Baneo inmediato.',
+                    '',
                     '**Exploits y bugs** — Prohibido el uso de exploits, bugs o mecánicas no intencionadas.',
+                    '',
                     '**Dinos blindados** — Prohibido su uso en cualquier circunstancia.',
+                    '',
                     '**Responsabilidad** — Los admins no se responsabilizan de pérdidas en reinicios o caídas.'
                 ].join('\n'),
                 inline: false
@@ -45,8 +50,11 @@ function construirEmbedsNormasCanal() {
                 name: '🛡️ TRIBUS',
                 value: [
                     '**Máximo** — 6 jugadores por tribu.',
+                    '',
                     '**Responsabilidad interna** — Lo que haga un miembro es responsabilidad de toda la tribu.',
+                    '',
                     '**Acoso entre tribus** — Prohibido el acoso continuado. Deben poder recuperarse tras un ataque.',
+                    '',
                     '**Guerra entre tribus** — Si ambas se declaran la guerra, sin restricciones entre ellas. Una sola declaración necesita motivos justificados y aprobación de la administración.'
                 ].join('\n'),
                 inline: false
@@ -54,10 +62,14 @@ function construirEmbedsNormasCanal() {
             {
                 name: '🏗️ CONSTRUCCIÓN',
                 value: [
-                    '**Zonas prohibidas** — No construir en cuevas, recursos, spawns, artefactos ni notas de explorador.',
+                    '**Zonas prohibidas** — Está prohibido construir en todo tipo de cuevas.',
+                    '',
                     '**Spam de estructuras** — Prohibido marcar terreno sin construir.',
+                    '',
                     '**Domesticación** — Las estructuras para domar se eliminan inmediatamente después.',
+                    '',
                     '**Límite de bases** — Máximo 2 bases por tribu.',
+                    '',
                     '**Abandono** — Estructuras dañadas o sin uso serán eliminadas sin aviso.'
                 ].join('\n'),
                 inline: false
@@ -71,25 +83,49 @@ function construirEmbedsNormasCanal() {
                 name: '⚔️ PVP Y RAIDS',
                 value: [
                     '**PVP libre** — Permitido en todo el mapa salvo excepciones.',
-                    '**Protección Bandera Blanca** — Los nuevos pueden solicitar 72h de protección abriendo un 🎫 ticket. Si atacan o roban durante este periodo: baneo inmediato.',
+                    '',
+                    '**Protección Bandera Blanca** — Los nuevos pueden solicitar 72h de protección abriendo un 🎫 ticket. Si atacan o roban durante este periodo: baneo inmediato. La Bandera Blanca solo ofrece protección a estructuras.',
+                    '',
                     '**Zonas comunes** — Prohibido atacar o dañar zonas comunes y estructuras de TSDE-ADMIN. Mercado, Zona de Crafteo y Prisión son peatonales — los dinos van al Parking de Dinos. Robar en Crafteo: baneo inmediato.',
-                    '**Durante eventos** — Prohibido atacar mientras hay un evento oficial activo.',
-                    '**Acoso post-raid** — Deja recuperarse a la tribu raideada antes de volver a atacar.'
+                    '',
+                    '**Durante eventos** — Prohibido atacar mientras hay un evento oficial activo.'
                 ].join('\n'),
                 inline: false
             },
             {
+                name: '⏳ ACOSO POST-RAID',
+                value: [
+                    'Tras raidear a una tribu, esta no podrá volver a ser atacada durante **3 días**, permitiendo que sus miembros puedan recuperarse y volver a competir en igualdad de condiciones.',
+                    '',
+                    '**Excepción** — Si la tribu raideada devuelve el ataque durante ese periodo, la tribu atacante también podrá responder, al considerarse que ambas vuelven a estar en conflicto.'
+                ].join('\n'),
+                inline: false
+            }
+        );
+
+    const embed3 = new EmbedBuilder()
+        .setColor(0x9B59B6)
+        .addFields(
+            {
                 name: '🌿 PVE',
-                value: '**Agarrar jugadores** — Prohibido agarrar o mover jugadores de otras tribus fuera de un combate acordado. Denuncias requieren clip o captura.',
+                value: [
+                    '**Agarrar jugadores** — Prohibido agarrar o mover jugadores de otras tribus fuera de un combate acordado.',
+                    '',
+                    'Las denuncias requieren clip o captura como prueba.'
+                ].join('\n'),
                 inline: false
             },
             {
                 name: '📋 SANCIONES Y REPORTES',
                 value: [
                     '→ Sin capturas, logs o vídeo no se actuará.',
+                    '',
                     '→ Reportes únicamente por 🎫 tickets en Discord.',
+                    '',
                     '→ No se aceptan reportes por privados a admins.',
+                    '',
                     '→ Los admins tienen la última palabra siempre.',
+                    '',
                     '→ El incumplimiento puede resultar en kick, baneo temporal o permanente según la gravedad.'
                 ].join('\n'),
                 inline: false
@@ -98,7 +134,7 @@ function construirEmbedsNormasCanal() {
         .setFooter({ text: 'TSDE Arkeanos — Última actualización' })
         .setTimestamp();
 
-    return [embed1, embed2];
+    return [embed1, embed2, embed3];
 }
 
 // --- MODAL NOMBRE ARK (lo único que pide el bot ahora) ---
@@ -150,7 +186,6 @@ function construirEmbedBienvenida() {
         .setFooter({ text: 'TSDE Arkeanos — Registro de nuevos jugadores' });
 }
 
-// Asegura que el mensaje fijo con botón existe en #bienvenida (idempotente)
 async function asegurarMensajeBienvenida(client) {
     if (!config.canales.bienvenida) {
         console.warn('[REG] Canal bienvenida no configurado');
@@ -242,14 +277,11 @@ async function handleModal(interaction, client) {
                 .addFields({ name: '🎮 Nombre en ARK registrado', value: `\`${nombreArk}\``, inline: true })
                 .setColor(0x2ECC71);
 
-            // CRÍTICO: usar reply ephemeral, NO update — el mensaje fijo es compartido
-            // por todos los jugadores, no se puede editar/reemplazar su botón
             await interaction.reply({
                 embeds: [embedConfirm],
                 flags: MessageFlags.Ephemeral
             });
 
-            // Aviso a #general (no a #bienvenida, para no desplazar el mensaje fijo del botón)
             try {
                 if (config.canales.general) {
                     const canalGeneral = await client.channels.fetch(config.canales.general);
