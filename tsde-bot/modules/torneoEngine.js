@@ -2,15 +2,15 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder
 const database = require('../db.js');
 const rcon = require('./rconHelper.js');
 
-
 function cargarDB() {
-    const fs = require('fs');
-    return JSON.parse(fs.readFileSync('./database.json', 'utf8'));
+    return {
+        torneos_activos: database.getTorneosActivos(),
+        historial_eventos: database.getHistorialEventos()
+    };
 }
 
 function guardarDB(data) {
-    const fs = require('fs');
-    fs.writeFileSync('./database.json', JSON.stringify(data, null, 2), 'utf8');
+    // No-op — usar database.setTorneoActivo/removeTorneoActivo directamente
 }
 
 function esAdmin(interaction) {
@@ -168,8 +168,7 @@ async function iniciarTorneo(interaction, client, torneoId) {
     };
 
     if (!db.torneos_activos) db.torneos_activos = {};
-    db.torneos_activos[torneoId] = torneo;
-    guardarDB(db);
+    database.setTorneoActivo(torneoId, torneo);
 
     const embed = construirEmbedBracket(torneo);
     const botones = construirBotonesCombates(torneo);
@@ -178,8 +177,8 @@ async function iniciarTorneo(interaction, client, torneoId) {
     const canal = await client.channels.fetch(evento.canal_id);
     const mensaje = await canal.send({ embeds: [embed], components: botones });
 
-    db.torneos_activos[torneoId].mensaje_id = mensaje.id;
-    guardarDB(db);
+    torneo.mensaje_id = mensaje.id;
+    database.setTorneoActivo(torneoId, torneo);
 
     const enfrentamientos = primeraRonda
         .filter(c => c.j2 !== 'BYE')
@@ -235,13 +234,13 @@ async function handleButton(interaction, client) {
 
                 // Guardar en historial
                 if (!db.historial_eventos) db.historial_eventos = [];
-                db.historial_eventos.push({
+                database.addHistorialEvento({
                     titulo: torneo.titulo,
                     campeon: ganadores[0],
                     participantes: torneo.jugadores_iniciales,
                     fecha: new Date().toISOString()
                 });
-                delete db.torneos_activos[torneoId];
+                database.removeTorneoActivo(torneoId);
 
             } else {
                 // Siguiente ronda
@@ -258,7 +257,7 @@ async function handleButton(interaction, client) {
             }
         }
 
-        guardarDB(db);
+        // guardado via SQLite directo
 
         // Actualizar mensaje del bracket
         try {
@@ -287,8 +286,8 @@ async function handleButton(interaction, client) {
         const torneo = db.torneos_activos?.[torneoId];
         if (!torneo) return interaction.reply({ content: 'Torneo no encontrado.', ephemeral: true });
 
-        delete db.torneos_activos[torneoId];
-        guardarDB(db);
+        database.removeTorneoActivo(torneoId);
+        // guardado via SQLite directo
 
         try {
             const canal = await client.channels.fetch(torneo.canal_id);

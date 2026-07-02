@@ -11,29 +11,14 @@ const {
 const database = require('../db.js');
 const config = require('../config.json');
 
-
 // --- BASE DE DATOS ---
 
-function cargarDB() {
-    const fs = require('fs');
-    return JSON.parse(fs.readFileSync('./database.json', 'utf8'));
-}
-
-function guardarDB(data) {
-    const fs = require('fs');
-    fs.writeFileSync('./database.json', JSON.stringify(data, null, 2), 'utf8');
-}
-
 function cargarHoF() {
-    const db = cargarDB();
-    if (!db.hall_of_fame) db.hall_of_fame = [];
-    return db.hall_of_fame;
+    return database.getHallOfFame();
 }
 
 function guardarHoF(hof) {
-    const db = cargarDB();
-    db.hall_of_fame = hof;
-    guardarDB(db);
+    // No se usa directamente — las operaciones son add/remove individuales
 }
 
 // --- CATEGORÍAS ---
@@ -118,8 +103,7 @@ async function añadirGanadorTorneo(client, jugador, titulo, fecha) {
         añadidoPor: 'Sistema automático',
         automatico: true
     };
-    hof.push(entrada);
-    guardarHoF(hof);
+    database.addHallOfFame(entrada);
     await publicarEnCanal(client, entrada);
 }
 
@@ -141,7 +125,13 @@ async function añadirRecordLaberinto(client, jugador, tiempo, fecha) {
         automatico: true
     };
     hofFiltrado.push(entrada);
-    guardarHoF(hofFiltrado);
+    // Reescribir HoF completo
+    // (eliminar las que no están en hofFiltrado)
+    for (const e of hof) {
+        if (!hofFiltrado.find(f => f.id === e.id)) {
+            database.removeHallOfFame(e.id);
+        }
+    }
     await publicarEnCanal(client, entrada);
 }
 
@@ -215,8 +205,7 @@ async function handleModal(interaction, client) {
             };
 
             const hof = cargarHoF();
-            hof.push(entrada);
-            guardarHoF(hof);
+            database.addHallOfFame(entrada);
 
             await publicarEnCanal(client, entrada);
 
@@ -256,7 +245,7 @@ async function eliminarEntrada(interaction, client, entradaId) {
     }
 
     const eliminada = hof.splice(index, 1)[0];
-    guardarHoF(hof);
+    database.removeHallOfFame(eliminada.id);
 
     await interaction.reply({
         content: `🗑️ Entrada de **${eliminada.nombre}** eliminada del Hall of Fame.`,

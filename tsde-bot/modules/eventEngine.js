@@ -3,15 +3,18 @@ const database = require('../db.js');
 const rcon = require('./rconHelper.js');
 const { programarRecordatorios, cancelarRecordatorios, parsearFecha } = require('./recordatoriosEngine.js');
 
-
 function cargarDB() {
-    const fs = require('fs');
-    return JSON.parse(fs.readFileSync('./database.json', 'utf8'));
+    return {
+        eventos_activos: database.getEventosActivos(),
+        historial_eventos: database.getHistorialEventos(),
+        penalizados: database.getPenalizados()
+    };
 }
 
 function guardarDB(data) {
-    const fs = require('fs');
-    fs.writeFileSync('./database.json', JSON.stringify(data, null, 2), 'utf8');
+    // eventos_activos se gestiona individualmente
+    // historial_eventos se añade individualmente
+    // No hay escritura masiva — usar las funciones específicas
 }
 
 function esAdmin(interaction) {
@@ -215,8 +218,7 @@ async function handleModal(interaction, client) {
                 canal_id: config.canales.eventos
             };
 
-            db.eventos_activos[id] = evento;
-            guardarDB(db);
+            database.setEventoActivo(id, evento);
 
             const canal = await client.channels.fetch(config.canales.eventos).catch(() => null);
             if (!canal) {
@@ -227,8 +229,8 @@ async function handleModal(interaction, client) {
             const botones = construirBotonesEvento(evento);
             const mensaje = await canal.send({ embeds: [embed], components: botones });
 
-            db.eventos_activos[id].mensaje_id = mensaje.id;
-            guardarDB(db);
+            evento.mensaje_id = mensaje.id;
+            database.setEventoActivo(id, evento);
 
             if (fecha_timestamp) {
                 await programarRecordatorios(client, db.eventos_activos[id]);
@@ -290,7 +292,7 @@ async function handleButton(interaction, client) {
             await interaction.reply({ content: `⏳ Te hemos añadido a la lista de espera de **${evento.titulo}**.`, flags: MessageFlags.Ephemeral });
         }
 
-        guardarDB(db);
+        database.setEventoActivo(eventoId, evento);
         await actualizarMensajeEvento(interaction, evento, client);
         return;
     }
@@ -330,7 +332,7 @@ async function handleButton(interaction, client) {
             return interaction.followUp({ content: '⚠️ No estás inscrito en este evento.', flags: MessageFlags.Ephemeral });
         }
 
-        guardarDB(db);
+        database.setEventoActivo(eventoId, evento);
         await actualizarMensajeEvento(interaction, evento, client);
         return;
     }
@@ -375,7 +377,7 @@ async function handleButton(interaction, client) {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         evento.estado = 'cerrado';
-        guardarDB(db);
+        database.setEventoActivo(eventoId, evento);
         await actualizarMensajeEvento(interaction, evento, client);
         await rcon.broadcast(`Inscripciones cerradas para: ${evento.titulo}.`);
         return interaction.followUp({ content: `🔒 Inscripciones cerradas para **${evento.titulo}**.`, flags: MessageFlags.Ephemeral });
@@ -405,9 +407,8 @@ async function handleButton(interaction, client) {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         cancelarRecordatorios(eventoId);
-        db.historial_eventos.push({ ...evento, estado: 'cancelado', cancelado_en: new Date().toISOString() });
-        delete db.eventos_activos[eventoId];
-        guardarDB(db);
+        database.addHistorialEvento({ ...evento, estado: 'cancelado', cancelado_en: new Date().toISOString() });
+        database.removeEventoActivo(eventoId);
 
         const canal = await client.channels.fetch(evento.canal_id);
         const mensaje = await canal.messages.fetch(evento.mensaje_id);

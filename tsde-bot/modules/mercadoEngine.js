@@ -12,21 +12,23 @@ const {
 const database = require('../db.js');
 const config = require('../config.json');
 
-
-// Total de puestos físicos del mercado — cambia este número si añades más en el futuro
 const TOTAL_PUESTOS = 11;
-
-// Tags del foro (se cachean al primer uso)
 let forumTags = null;
 
 function cargarDB() {
-    const fs = require('fs');
-    return JSON.parse(fs.readFileSync('./database.json', 'utf8'));
+    return {
+        mercaderes: (() => {
+            const all = database.getAllMercaderes();
+            const result = {};
+            for (const m of all) result[m.discord_id] = m;
+            return result;
+        })(),
+        mercado: {}
+    };
 }
 
 function guardarDB(data) {
-    const fs = require('fs');
-    fs.writeFileSync('./database.json', JSON.stringify(data, null, 2), 'utf8');
+    // No-op — usar database.setMercader/removeMercader directamente
 }
 
 function esMercader(interaction) {
@@ -340,17 +342,15 @@ async function publicarAnuncio(interaction, client, datos) {
         ...datos
     };
 
-    if (!db.mercado) db.mercado = {};
-    db.mercado[anuncioId] = anuncio;
-    guardarDB(db);
+    database.setMercadoAnuncio(anuncioId, anuncio);
 
     const embed   = construirEmbedAnuncio(anuncio);
     const botones = construirBotonesAnuncio(anuncio);
 
     const msg = await hilo.send({ embeds: [embed], components: botones });
 
-    db.mercado[anuncioId].mensaje_id = msg.id;
-    guardarDB(db);
+    anuncio.mensaje_id = msg.id;
+    database.setMercadoAnuncio(anuncioId, anuncio);
 
     await interaction.reply({
         content: `✅ Anuncio publicado en tu puesto <#${puestoPostId}>`,
@@ -374,7 +374,7 @@ async function handleButton(interaction, client) {
         }
 
         anuncio.vendido = true;
-        guardarDB(db);
+        database.setMercader(usuario.id, nuevoMercader);
 
         const embed = construirEmbedAnuncio(anuncio);
         await interaction.update({ embeds: [embed], components: construirBotonesAnuncio(anuncio) });
@@ -391,8 +391,7 @@ async function handleButton(interaction, client) {
             return interaction.reply({ content: '⛔ Solo el vendedor puede retirar este anuncio.', flags: MessageFlags.Ephemeral });
         }
 
-        delete db.mercado[anuncioId];
-        guardarDB(db);
+        database.removeMercadoAnuncio(anuncioId);
 
         await interaction.update({
             embeds: [
@@ -416,7 +415,7 @@ async function actualizarPanelPuestos(client) {
     }
 
     const db = cargarDB();
-    const mercaderes = db.mercaderes || {};
+    const mercaderes = (() => { const all = database.getAllMercaderes(); const r = {}; for (const m of all) r[m.discord_id] = m; return r; })();
 
     // Mapear qué número de puesto está ocupado por quién
     const ocupados = {};
@@ -513,14 +512,13 @@ async function darRolMercader(interaction, client, usuario, numPuesto) {
 
         await member.roles.add(rol);
 
-        if (!db.mercaderes) db.mercaderes = {};
-        db.mercaderes[usuario.id] = {
+        const nuevoMercader = {
             username: displayName,
             puesto: nombrePuesto,
             puesto_post_id: puestoPostId,
             fechaAsignacion: new Date().toISOString()
         };
-        guardarDB(db);
+        database.setMercader(usuario.id, nuevoMercader);
 
         // Actualizar el panel público de puestos disponibles
         await actualizarPanelPuestos(client);
@@ -584,8 +582,7 @@ async function quitarRolMercader(interaction, client, usuario) {
 
         await member.roles.remove(rol);
 
-        if (db.mercaderes?.[usuario.id]) delete db.mercaderes[usuario.id];
-        guardarDB(db);
+        database.removeMercader(usuario.id);
 
         // Actualizar el panel público de puestos disponibles
         await actualizarPanelPuestos(client);

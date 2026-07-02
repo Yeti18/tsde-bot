@@ -12,7 +12,6 @@ const {
 const database = require('../db.js');
 const rcon = require('./rconHelper.js');
 
-
 // Cronómetros activos en memoria
 const cronometros = {};
 let panelMensajeId = null;
@@ -21,26 +20,14 @@ let intervaloActualizacion = null;
 
 // --- BASE DE DATOS ---
 
-function cargarDB() {
-    const fs = require('fs');
-    return JSON.parse(fs.readFileSync('./database.json', 'utf8'));
-}
-
-function guardarDB(data) {
-    const fs = require('fs');
-    fs.writeFileSync('./database.json', JSON.stringify(data, null, 2), 'utf8');
-}
-
 function cargarLaberinto() {
-    const db = cargarDB();
-    if (!db.laberinto) db.laberinto = { evento_activo: null, resultados: [], equipos: [] };
-    return db.laberinto;
+    return database.getLaberinto();
 }
 
 function guardarLaberinto(laberinto) {
-    const db = cargarDB();
-    db.laberinto = laberinto;
-    guardarDB(db);
+    database.setLaberinto('evento_activo', laberinto.evento_activo || null);
+    database.setLaberinto('resultados', laberinto.resultados || []);
+    database.setLaberinto('equipos', laberinto.equipos || []);
 }
 
 // --- HELPERS ---

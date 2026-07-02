@@ -10,15 +10,16 @@ const {
 const database = require('../db.js');
 const config = require('../config.json');
 
-
 function cargarDB() {
-    const fs = require('fs');
-    return JSON.parse(fs.readFileSync('./database.json', 'utf8'));
+    const vot = database.getVotaciones();
+    return { votaciones: vot };
 }
 
 function guardarDB(data) {
-    const fs = require('fs');
-    fs.writeFileSync('./database.json', JSON.stringify(data, null, 2), 'utf8');
+    if (data.votaciones) {
+        database.setVotaciones('sugerencias_pendientes', data.votaciones.sugerencias_pendientes || []);
+        database.setVotaciones('votos', data.votaciones.votos || {});
+    }
 }
 
 function esAdmin(interaction) {
