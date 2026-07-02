@@ -102,8 +102,8 @@ function construirModalNombreArk() {
         new ActionRowBuilder().addComponents(
             new TextInputBuilder()
                 .setCustomId('nombre_ark')
-                .setLabel('Xbox: tu Gamertag · PC: nombre de personaje')
-                .setPlaceholder('Es el nombre que verán los admins al buscarte...')
+                .setLabel('Nombre de tu personaje en ARK')
+                .setPlaceholder('Escribe el nombre con el que juegas...')
                 .setStyle(TextInputStyle.Short)
                 .setMinLength(2)
                 .setMaxLength(50)
@@ -142,7 +142,7 @@ function construirEmbedBienvenida() {
             '¡Hola superviviente! Nos alegra tenerte aquí.\n\n' +
             '**Para tener acceso completo al servidor necesitas:**\n' +
             '📜 Leer las normas en `#normas`\n' +
-            '🎮 Registrar tu nombre exacto en ARK *(Xbox: tu Gamertag · PC: nombre de personaje)*\n\n' +
+            '🎮 Registrar el nombre de tu personaje en ARK\n\n' +
             'Pulsa el botón de abajo — al hacerlo confirmas que has leído ' +
             'y aceptas las normas del servidor.'
         )
