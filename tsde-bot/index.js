@@ -3,6 +3,7 @@ const fs = require('fs');
 const http = require('http');
 const config = require('./config.json');
 const database = require('./db.js');
+const { iniciarAdminPanel } = require('./adminPanel.js');
 
 // Conectar SQLite al arrancar
 database.conectar();
@@ -59,3 +60,6 @@ http.createServer((req, res) => {
 
 // Arrancar el bot
 client.login(process.env.DISCORD_TOKEN || config.token);
+
+// Arrancar panel de admin
+iniciarAdminPanel(client);
