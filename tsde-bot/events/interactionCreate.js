@@ -31,6 +31,7 @@ module.exports = {
             if (id.startsWith('pol_')) return require('../modules/pollEngine.js').handleButton(interaction, client);
             if (id.startsWith('mer_')) return require('../modules/mercadoEngine.js').handleButton(interaction, client);
             if (id.startsWith('bb_')) return require('../modules/banderaBlancaEngine.js').handleButton(interaction, client);
+            if (id.startsWith('tkt_')) return require('../modules/ticketEngine.js').handleButton(interaction, client);
         }
 
         // --- SELECT MENUS ---
@@ -52,6 +53,7 @@ module.exports = {
             if (id.startsWith('hof_')) return require('../modules/hallFameEngine.js').handleModal(interaction, client);
             if (id.startsWith('msg_')) return require('../commands/admin/mensaje.js').handleModal(interaction, client);
             if (id.startsWith('bb_')) return require('../modules/banderaBlancaEngine.js').handleModal(interaction, client);
+            if (id.startsWith('tkt_')) return require('../modules/ticketEngine.js').handleModal(interaction, client);
         }
     }
 };
