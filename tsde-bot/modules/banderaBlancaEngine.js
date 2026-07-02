@@ -63,17 +63,12 @@ function construirEmbedSolicitud() {
             '✅ Haberla colocado visible cerca de tu base\n\n' +
             '⚠️ **Solo válida para tus primeros días en el servidor.** No se puede ' +
             'solicitar si ya la usaste antes o llevas tiempo jugando.\n\n' +
-            '⚠️ **Solo válido para jugadores en superficie.** Si te escondes en ' +
-            'una cueva nada más empezar, no eres apto para esta protección — ' +
-            'es para quien juega de forma normal y visible, no para evitar el PvP.\n\n' +
             'ℹ️ **Importante sobre cómo funciona:** la Bandera Blanca protege tu ' +
             '**estructura** de daño automáticamente. Tu personaje y tus dinos ' +
             '**no están protegidos por el juego en sí** — la protección real frente ' +
             'a ataques viene de la norma: cualquiera que te ataque, robe o sea hostil ' +
             'contigo durante estas 72h será **baneado inmediatamente**. Si alguien te ' +
-            'ataca, repórtalo en #reportes con prueba.\n\n' +
-            'Una vez confirmado, pulsa el botón de abajo. Se creará un canal privado ' +
-            'donde un administrador gestionará tu solicitud.\n\n' +
+            'ataca, repórtalo abriendo un ticket en #tickets.\n\n' +
             '🚫 Atacar, robar o ser hostil mientras tienes la protección activa ' +
             'resulta en baneo inmediato — lee las normas en #normas.'
         )
@@ -188,7 +183,7 @@ function construirEmbedCanal(solicitud) {
 
     if (solicitud.estado === 'pendiente') {
         embed.setDescription(
-            'Comprobad que **está en superficie** (no en cueva) antes de activar.\n' +
+            'Comprobad que cumple los requisitos antes de activar.\n' +
             'Entrad al juego y activad la protección, luego pulsad el botón de abajo.'
         );
     }
@@ -205,7 +200,7 @@ function construirBotonesCanal(solicitud) {
                 .setStyle(ButtonStyle.Success),
             new ButtonBuilder()
                 .setCustomId(`bb_denegar_cueva_${solicitud.id}`)
-                .setLabel('❌ Está en cueva')
+                .setLabel('❌ No cumple requisitos')
                 .setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
                 .setCustomId(`bb_denegar_repetida_${solicitud.id}`)
@@ -494,7 +489,7 @@ async function denegarSolicitud(interaction, client, solicitudId, motivo) {
     });
 
     const mensajes = {
-        cueva: '🔴 Tu solicitud de Bandera Blanca ha sido **denegada**.\n\nMotivo: estás escondido en una cueva. Esta protección es para jugadores en superficie jugando de forma normal, no para evitar el PvP escondiéndote.',
+        cueva: '🔴 Tu solicitud de Bandera Blanca ha sido **denegada**.\n\nMotivo: no cumples los requisitos para esta protección. Asegúrate de haber crafteado y colocado la Bandera Blanca correctamente antes de solicitarla. Si tienes dudas, abre un ticket de soporte.',
         repetida: '🔴 Tu solicitud de Bandera Blanca ha sido **denegada**.\n\nMotivo: ya solicitaste esta protección anteriormente. La Bandera Blanca es solo para tus primeros días en el servidor, no se puede pedir más de una vez.'
     };
     const mensajeTexto = mensajes[motivo] || '🔴 Tu solicitud de Bandera Blanca ha sido denegada. Contacta con un admin si tienes dudas.';
