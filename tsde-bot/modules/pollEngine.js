@@ -262,6 +262,29 @@ async function handleButton(interaction, client) {
         poll.votos[opcionIdx].push(usuario);
         guardarDB(db);
 
+        // Log privado a #logs (anónimo para jugadores, visible para admins)
+        try {
+            const config = require('../config.json');
+            if (config.canales.logs) {
+                const canalLogs = await client.channels.fetch(config.canales.logs);
+                await canalLogs.send({
+                    embeds: [new EmbedBuilder()
+                        .setTitle('📊 Voto registrado')
+                        .setColor(0x3498DB)
+                        .addFields(
+                            { name: '👤 Usuario', value: `${interaction.user.username} (<@${interaction.user.id}>)`, inline: true },
+                            { name: '✅ Votó', value: poll.opciones[opcionIdx], inline: true },
+                            { name: '📋 Encuesta', value: poll.pregunta, inline: false }
+                        )
+                        .setFooter({ text: 'Solo visible para admins — la encuesta es anónima para los jugadores' })
+                        .setTimestamp()
+                    ]
+                });
+            }
+        } catch (e) {
+            // Si falla el log no interrumpimos el voto
+        }
+
         // Actualizar embed
         const embed = construirEmbedPoll(poll);
         const botones = construirBotonesPoll(pollId, poll.opciones, false);

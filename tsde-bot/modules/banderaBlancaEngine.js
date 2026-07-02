@@ -118,12 +118,21 @@ function construirModalSolicitud() {
         new ActionRowBuilder().addComponents(
             new TextInputBuilder()
                 .setCustomId('nombre_ark')
-                .setLabel('Tu nombre exacto en ARK')
+                .setLabel('Tu nombre en ARK / Gamertag Xbox')
                 .setPlaceholder('Para que los admins te encuentren fácilmente...')
                 .setStyle(TextInputStyle.Short)
                 .setMinLength(2)
                 .setMaxLength(50)
                 .setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('nombre_tribu')
+                .setLabel('Nombre de tu tribu (si tienes)')
+                .setPlaceholder('Deja vacío si aún no tienes tribu...')
+                .setStyle(TextInputStyle.Short)
+                .setMaxLength(50)
+                .setRequired(false)
         ),
         new ActionRowBuilder().addComponents(
             new TextInputBuilder()
@@ -156,7 +165,8 @@ function construirEmbedCanal(solicitud) {
         .addFields(
             { name: 'Estado', value: `${estado.emoji} ${estado.texto}`, inline: true },
             { name: '👤 Discord', value: solicitud.discordUsername, inline: true },
-            { name: '🎮 Nombre ARK', value: solicitud.nombreArk, inline: true }
+            { name: '🎮 Nombre ARK', value: solicitud.nombreArk, inline: true },
+            { name: '🛡️ Tribu', value: solicitud.nombreTribu || 'Sin tribu / No indicada', inline: true }
         )
         .setTimestamp(new Date(solicitud.fechaSolicitud));
 
@@ -302,6 +312,7 @@ async function handleModal(interaction, client) {
     if (interaction.customId === 'bb_modal_solicitar') {
         try {
             const nombreArk = interaction.fields.getTextInputValue('nombre_ark').trim();
+            const nombreTribu = interaction.fields.getTextInputValue('nombre_tribu').trim();
             const confirmacion = interaction.fields.getTextInputValue('confirmacion').trim().toLowerCase();
 
             if (!confirmacion.startsWith('s')) {
@@ -339,6 +350,7 @@ async function handleModal(interaction, client) {
                 discordId: interaction.user.id,
                 discordUsername: interaction.user.username,
                 nombreArk,
+                nombreTribu: nombreTribu || null,
                 estado: 'pendiente',
                 fechaSolicitud: new Date().toISOString(),
                 fechaActivacion: null,
@@ -474,7 +486,7 @@ async function denegarSolicitud(interaction, client, solicitudId, motivo) {
     });
 
     const mensajes = {
-        cueva: '🔴 Tu solicitud de Bandera Blanca ha sido **denegada**.\n\nMotivo: estás dentro de una cueva. La Bandera Blanca es para jugadores en superficie jugando de forma visible y normal.',
+        cueva: '🔴 Tu solicitud de Bandera Blanca ha sido **denegada**.\n\nMotivo: estás escondido en una cueva. Esta protección es para jugadores en superficie jugando de forma normal, no para evitar el PvP escondiéndote.',
         repetida: '🔴 Tu solicitud de Bandera Blanca ha sido **denegada**.\n\nMotivo: ya solicitaste esta protección anteriormente. La Bandera Blanca es solo para tus primeros días en el servidor, no se puede pedir más de una vez.'
     };
     const mensajeTexto = mensajes[motivo] || '🔴 Tu solicitud de Bandera Blanca ha sido denegada. Contacta con un admin si tienes dudas.';
