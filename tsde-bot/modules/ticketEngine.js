@@ -100,7 +100,19 @@ function construirEmbedTickets() {
             { name: '🛒 Compra tienda', value: 'Entrega de producto comprado en la web', inline: true },
             { name: '⚠️ Reportar jugador', value: 'Reportar infracción con pruebas', inline: true },
             { name: '🦖 Soporte general', value: 'Cualquier otra consulta o problema', inline: true },
-            { name: '🏳️ Bandera Blanca', value: 'Solicitar protección de 72h para nuevos jugadores', inline: true }
+            {
+                name: '🏳️ Bandera Blanca — Protección 72h',
+                value: [
+                    'Para nuevos jugadores durante sus primeros días.',
+                    '**Antes de solicitarla necesitas:**',
+                    '✅ Aprender el engrama WHITE FLAG PROTECTION',
+                    '✅ Craftearla *(10 Piel, 50 Madera, 50 Fibra)*',
+                    '✅ Haberla colocado visible cerca de tu base',
+                    '⚠️ Solo válida los **primeros días** en el servidor',
+                    '🚫 Atacar durante la protección = **baneo inmediato**'
+                ].join('\n'),
+                inline: false
+            }
         )
         .setFooter({ text: 'TSDE Arkeanos — Soporte' });
 }
