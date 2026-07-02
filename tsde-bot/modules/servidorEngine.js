@@ -1,16 +1,16 @@
 const { EmbedBuilder } = require('discord.js');
 const Rcon = require('rcon');
-const fs = require('fs');
 const config = require('../config.json');
+const database = require('../db.js');
 
 let mensajeEstadoId = null;
 let mensajeJugadoresId = null;
 let intervalo = null;
 
 // Estado de caída — para diferenciar reinicio normal de caída real
-let cayendoDesde = null; // timestamp de cuando empezó a fallar
+let cayendoDesde = null;
 let avisoEnviado = false;
-let nombreCanalActual = null; // para no spamear el rename
+let nombreCanalActual = null;
 
 const SERVIDOR = config.servidor || {
     nombre: 'TSDE Arkeanos',
@@ -22,16 +22,7 @@ const SERVIDOR = config.servidor || {
 // --- BUSCAR JUGADOR REGISTRADO POR NOMBRE DE ARK ---
 
 function buscarJugadorRegistrado(nombreArk) {
-    try {
-        const db = JSON.parse(fs.readFileSync('./database.json', 'utf8'));
-        const jugadores = db.jugadores || {};
-        const entrada = Object.values(jugadores).find(j =>
-            j.nombreArk && j.nombreArk.toLowerCase() === nombreArk.toLowerCase()
-        );
-        return entrada || null;
-    } catch (e) {
-        return null;
-    }
+    return database.getJugadorPorArk(nombreArk) || null;
 }
 
 
@@ -81,18 +72,14 @@ async function consultarServidor() {
         const jugadores = parsearJugadores(respuesta);
         // Guardar en DB para que el endpoint HTTP de la web lo pueda leer
         try {
-            const db = JSON.parse(fs.readFileSync('./database.json', 'utf8'));
-            db.jugadores_online = jugadores.map(j => j.nombre || j);
-            fs.writeFileSync('./database.json', JSON.stringify(db, null, 2));
+            database.setJugadoresOnline(jugadores.map(j => j.nombre || j));
         } catch (e) {}
 
         return { online: true, jugadores };
     } catch (error) {
         console.log(`[SRV] Servidor no responde: ${error.message}`);
         try {
-            const db = JSON.parse(fs.readFileSync('./database.json', 'utf8'));
-            db.jugadores_online = [];
-            fs.writeFileSync('./database.json', JSON.stringify(db, null, 2));
+            database.setJugadoresOnline([]);
         } catch (e) {}
         return { online: false, jugadores: [] };
     }

@@ -10,16 +10,13 @@ const {
     PermissionFlagsBits,
     MessageFlags
 } = require('discord.js');
-const fs = require('fs');
 const config = require('../config.json');
-
-const DB_PATH = './database.json';
+const database = require('../db.js');
 
 // Horario de atención España
-const HORA_INICIO = 10; // 10:00
-const HORA_FIN = 1;     // 01:00 (siguiente día)
+const HORA_INICIO = 10;
+const HORA_FIN = 1;
 
-// Zonas horarias latinoamericanas (offset respecto a España CET/CEST)
 const ZONAS = [
     { pais: '🇲🇽 México (CDMX)', offset: -7 },
     { pais: '🇨🇴 Colombia', offset: -6 },
@@ -28,32 +25,22 @@ const ZONAS = [
     { pais: '🇨🇱 Chile', offset: -4 }
 ];
 
+// Compatibilidad con código existente
 function cargarDB() {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+    return {
+        incubadoras: database.getIncubadoras(),
+        tickets: { historial: [] },
+        reportes: []
+    };
 }
 
-function guardarDB(data) {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
-}
+function guardarDB(data) {} // No-op, SQLite se actualiza directamente
 
 function cargarTickets() {
-    const db = cargarDB();
-    if (!db.tickets) db.tickets = { abiertos: {}, historial: [] };
-    if (!db.incubadoras) {
-        db.incubadoras = [
-            { id: 1, pin: '0000', estado: 'libre' },
-            { id: 2, pin: '0000', estado: 'libre' },
-            { id: 3, pin: '0000', estado: 'libre' },
-            { id: 4, pin: '0000', estado: 'libre' }
-        ];
-        guardarDB(db);
-    }
-    return db;
+    return cargarDB();
 }
 
-function guardarTickets(db) {
-    guardarDB(db);
-}
+function guardarTickets(db) {} // No-op
 
 function generarPinAleatorio() {
     return Math.floor(1000 + Math.random() * 9000).toString();
@@ -309,15 +296,15 @@ async function handleButton(interaction, client) {
             return;
         }
 
-        // Guardar en historial
-        const db = cargarDB();
-        if (!db.tickets) db.tickets = { abiertos: {}, historial: [] };
-        db.tickets.historial.push({
-            canal: interaction.channel.name,
-            cerradoPor: interaction.user.username,
+        // Registrar cierre en SQLite
+        database.addTicket({
+            tipo: 'cerrado',
+            discordId: interaction.user.id,
+            discordUsername: interaction.user.username,
+            datos: { canal: interaction.channel.name },
+            estado: 'cerrado',
             fecha: new Date().toISOString()
         });
-        guardarDB(db);
 
         await interaction.reply({ content: '🔒 Cerrando ticket en 5 segundos...' });
         setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
@@ -334,7 +321,6 @@ async function handleEclosionado(interaction, client, incubadoraId) {
         return;
     }
 
-    const db = cargarDB();
     const nuevoPIN = generarPinAleatorio();
 
     await interaction.update({
@@ -363,17 +349,11 @@ async function handlePinActualizado(interaction, client, incubadoraId) {
         return;
     }
 
-    // Extraer nuevo PIN del customId
     const partes = interaction.customId.split('_');
     const nuevoPIN = partes[partes.length - 1];
 
-    const db = cargarDB();
-    const incubadora = db.incubadoras.find(i => i.id === incubadoraId);
-    if (incubadora) {
-        incubadora.pin = nuevoPIN;
-        incubadora.estado = 'libre';
-        guardarDB(db);
-    }
+    // Actualizar en SQLite
+    database.updateIncubadora(incubadoraId, 'libre', nuevoPIN, null);
 
     await interaction.update({
         embeds: [new EmbedBuilder()
@@ -410,20 +390,16 @@ async function procesarIncubadora(interaction, client) {
     const cantidad = interaction.fields.getTextInputValue('cantidad');
     const nombreArk = interaction.fields.getTextInputValue('nombre_ark');
 
-    const db = cargarTickets();
-
-    // Buscar incubadora libre
-    const incubadora = db.incubadoras.find(i => i.estado === 'libre');
+    // Buscar incubadora libre desde SQLite
+    const incubadora = database.getIncubadoraLibre();
     if (!incubadora) {
         return interaction.editReply({
             content: '⚠️ Todas las incubadoras están ocupadas ahora mismo. Inténtalo en unos minutos o espera a que un admin libere una.'
         });
     }
 
-    // Marcar como ocupada
-    incubadora.estado = 'ocupada';
-    incubadora.ocupadaPor = interaction.user.id;
-    guardarDB(db);
+    // Marcar como ocupada en SQLite
+    database.updateIncubadora(incubadora.id, 'ocupada', null, interaction.user.id);
 
     // Crear canal privado
     const canal = await crearCanalTicket(interaction, client, 'incubadora', 'Incubadora');
@@ -499,18 +475,14 @@ async function procesarReporte(interaction, client) {
     const motivo = interaction.fields.getTextInputValue('motivo');
     const pruebas = interaction.fields.getTextInputValue('pruebas') || 'Sin pruebas aportadas';
 
-    // Guardar en historial de reportes
-    const db = cargarDB();
-    if (!db.reportes) db.reportes = [];
-    db.reportes.push({
+    // Guardar en SQLite
+    database.addReporte({
         reportadoPor: interaction.user.username,
         jugadorReportado,
         motivo,
         pruebas,
-        fecha: new Date().toISOString(),
-        estado: 'pendiente'
+        fecha: new Date().toISOString()
     });
-    guardarDB(db);
 
     const canal = await crearCanalTicket(interaction, client, 'reporte', 'Reporte');
     const enHorario = estaEnHorario();

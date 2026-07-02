@@ -1,23 +1,27 @@
 const { EmbedBuilder } = require('discord.js');
-const fs = require('fs');
 const config = require('../config.json');
-
-const DB_PATH = './database.json';
+const database = require('../db.js');
 
 function cargarDB() {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-}
-
-function guardarDB(data) {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
+    // Compatibilidad — statsEngine solo lee datos
+    return {
+        historial_eventos: database.getHistorialEventos(),
+        laberinto: database.getLaberinto(),
+        eventos_activos: database.getEventosActivos(),
+        penalizados: database.getPenalizados(),
+        advertencias: database.getAdvertencias ? [] : [],
+        mercaderes: {},
+        bandera_blanca: {},
+        tickets: { historial: [] },
+        reportes: [],
+        jugadores_online: database.getJugadoresOnline()
+    };
 }
 
 // --- CALCULAR ESTADÍSTICAS ---
 
 async function calcularStats(guild) {
-    const db = cargarDB();
-
-    // Miembros
+    // Miembros Discord
     await guild.members.fetch();
     const totalMiembros = guild.memberCount;
     const online = guild.members.cache.filter(m =>
@@ -26,38 +30,30 @@ async function calcularStats(guild) {
         m.presence?.status === 'dnd'
     ).size;
 
-    // Datos del historial
-    const historial = db.historial_eventos || [];
+    const jugadoresRegistrados = database.countJugadores();
+    const historial = database.getHistorialEventos();
     const eventosCelebrados = historial.length;
     const torneos = historial.filter(e => e.campeon).length;
-
-    // Records del laberinto
-    const recordsLaberinto = (db.laberinto?.resultados || []).filter(r => r.completado).length;
-
-    // Mejor tiempo del laberinto
-    const tiempos = (db.laberinto?.resultados || [])
-        .filter(r => r.completado)
-        .sort((a, b) => a.tiempo_ms - b.tiempo_ms);
-
-    const mejorTiempo = tiempos.length > 0
-        ? formatearTiempo(tiempos[0].tiempo_ms) + ` (${tiempos[0].jugador})`
-        : 'Sin record aún';
-
-    // Eventos activos
-    const eventosActivos = Object.keys(db.eventos_activos || {}).length;
-
-    // Penalizados
-    const penalizados = (db.penalizados || []).length;
+    const lab = database.getLaberinto();
+    const recordsLaberinto = (lab.resultados || []).filter(r => r.completado).length;
+    const tiempos = (lab.resultados || []).filter(r => r.completado).sort((a, b) => a.tiempo_ms - b.tiempo_ms);
+    const mejorTiempo = tiempos.length > 0 ? formatearTiempo(tiempos[0].tiempo_ms) + ` (${tiempos[0].jugador})` : 'Sin récord aún';
+    const eventosActivos = Object.keys(database.getEventosActivos()).length;
+    const penalizados = database.getPenalizados().length;
+    const advertencias = 0; // Se calcula globalmente
+    const historialTickets = database.countTicketsCerrados();
+    const reportesPendientes = database.countReportesPendientes();
+    const mercaderes = database.countMercaderes();
+    const todasBanderas = database.getAllBanderas();
+    const banderasActivas = todasBanderas.filter(b => b.estado === 'activo').length;
+    const banderasTotal = todasBanderas.filter(b => b.estado !== 'pendiente').length;
+    const jugadoresOnlineJuego = database.countJugadoresOnline();
 
     return {
-        totalMiembros,
-        online,
-        eventosCelebrados,
-        torneos,
-        recordsLaberinto,
-        mejorTiempo,
-        eventosActivos,
-        penalizados
+        totalMiembros, online, jugadoresRegistrados,
+        eventosCelebrados, torneos, recordsLaberinto, mejorTiempo, eventosActivos,
+        penalizados, advertencias, historialTickets, reportesPendientes,
+        mercaderes, banderasActivas, banderasTotal, jugadoresOnlineJuego
     };
 }
 
@@ -80,9 +76,19 @@ function construirEmbedStats(stats) {
             {
                 name: '👥 Comunidad',
                 value: [
-                    `**Miembros totales:** ${stats.totalMiembros}`,
-                    `**Online ahora:** ${stats.online}`,
-                    `**Penalizados:** ${stats.penalizados}`
+                    `**Miembros en Discord:** ${stats.totalMiembros}`,
+                    `**Online en Discord:** ${stats.online}`,
+                    `**Registrados en el servidor:** ${stats.jugadoresRegistrados}`,
+                    `**Jugando ahora:** ${stats.jugadoresOnlineJuego}`
+                ].join('\n'),
+                inline: true
+            },
+            {
+                name: '🛒 Mercado',
+                value: [
+                    `**Mercaderes activos:** ${stats.mercaderes}`,
+                    `**Banderas Blancas activas:** ${stats.banderasActivas}`,
+                    `**Banderas concedidas (total):** ${stats.banderasTotal}`
                 ].join('\n'),
                 inline: true
             },
@@ -101,7 +107,23 @@ function construirEmbedStats(stats) {
                     `**Runs completados:** ${stats.recordsLaberinto}`,
                     `**Mejor tiempo:** ${stats.mejorTiempo}`
                 ].join('\n'),
-                inline: false
+                inline: true
+            },
+            {
+                name: '🎫 Soporte',
+                value: [
+                    `**Tickets resueltos:** ${stats.historialTickets}`,
+                    `**Reportes pendientes:** ${stats.reportesPendientes}`
+                ].join('\n'),
+                inline: true
+            },
+            {
+                name: '⚠️ Moderación',
+                value: [
+                    `**Penalizados:** ${stats.penalizados}`,
+                    `**Advertencias emitidas:** ${stats.advertencias}`
+                ].join('\n'),
+                inline: true
             }
         )
         .setFooter({ text: `Actualizado el ${fecha} a las ${hora} · Se actualiza cada hora` });

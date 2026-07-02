@@ -10,30 +10,38 @@ const {
     PermissionFlagsBits,
     ChannelType
 } = require('discord.js');
-const fs = require('fs');
 const config = require('../config.json');
+const database = require('../db.js');
 
-const DB_PATH = './database.json';
 const DURACION_HORAS = 72;
 
-function cargarDB() {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-}
-
-function guardarDB(data) {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
-}
-
+// Compatibilidad: cargarBandera/guardarBandera ahora usan SQLite internamente
 function cargarBandera() {
-    const db = cargarDB();
-    if (!db.bandera_blanca) db.bandera_blanca = {};
-    return db.bandera_blanca;
+    const banderas = database.getAllBanderas();
+    const result = {};
+    for (const b of banderas) {
+        result[b.id] = {
+            id: b.id,
+            discordId: b.discord_id,
+            discordUsername: b.discord_username,
+            nombreArk: b.nombre_ark,
+            nombreTribu: b.nombre_tribu,
+            estado: b.estado,
+            fechaSolicitud: b.fecha_solicitud,
+            fechaActivacion: b.fecha_activacion,
+            fechaExpiracion: b.fecha_expiracion,
+            canalId: b.canal_id,
+            motivoDenegacion: b.motivo_denegacion,
+            aviso24hEnviado: !!b.aviso_24h_enviado
+        };
+    }
+    return result;
 }
 
 function guardarBandera(data) {
-    const db = cargarDB();
-    db.bandera_blanca = data;
-    guardarDB(db);
+    for (const b of Object.values(data)) {
+        database.setBandera(b);
+    }
 }
 
 function esAdmin(interaction) {

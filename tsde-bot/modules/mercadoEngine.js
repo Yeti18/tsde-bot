@@ -9,10 +9,9 @@ const {
     MessageFlags,
     ChannelType
 } = require('discord.js');
-const fs = require('fs');
+const database = require('../db.js');
 const config = require('../config.json');
 
-const DB_PATH = './database.json';
 
 // Total de puestos físicos del mercado — cambia este número si añades más en el futuro
 const TOTAL_PUESTOS = 11;
@@ -21,11 +20,13 @@ const TOTAL_PUESTOS = 11;
 let forumTags = null;
 
 function cargarDB() {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+    const fs = require('fs');
+    return JSON.parse(fs.readFileSync('./database.json', 'utf8'));
 }
 
 function guardarDB(data) {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
+    const fs = require('fs');
+    fs.writeFileSync('./database.json', JSON.stringify(data, null, 2), 'utf8');
 }
 
 function esMercader(interaction) {

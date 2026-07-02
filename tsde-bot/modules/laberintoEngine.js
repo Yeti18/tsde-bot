@@ -9,10 +9,9 @@ const {
     StringSelectMenuBuilder,
     MessageFlags
 } = require('discord.js');
-const fs = require('fs');
+const database = require('../db.js');
 const rcon = require('./rconHelper.js');
 
-const DB_PATH = './database.json';
 
 // Cronómetros activos en memoria
 const cronometros = {};
@@ -23,11 +22,13 @@ let intervaloActualizacion = null;
 // --- BASE DE DATOS ---
 
 function cargarDB() {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+    const fs = require('fs');
+    return JSON.parse(fs.readFileSync('./database.json', 'utf8'));
 }
 
 function guardarDB(data) {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
+    const fs = require('fs');
+    fs.writeFileSync('./database.json', JSON.stringify(data, null, 2), 'utf8');
 }
 
 function cargarLaberinto() {
@@ -358,7 +359,7 @@ function construirEmbedPodiumFinal(evento) {
         const medallas = ['🥇', '🥈', '🥉'];
         const lineas = rankingEquipos.map((eq, i) => {
             const medal = i < 3 ? medallas[i] : `\`${i + 1}.\``;
-            const tiempo = eq.tiempo ? `Promedio: ${formatearTiempo(eq.tiempo)}` : `${eq.completados}/${eq.total} completados`;
+            const tiempo = eq.tiempo ? `Promedio: `${formatearTiempo(eq.tiempo)}`` : `${eq.completados}/${eq.total} completados`;
             return `${medal} **${eq.nombre}** — ${tiempo}`;
         });
         embed.setDescription(lineas.join('\n'));

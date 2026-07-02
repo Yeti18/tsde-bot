@@ -7,16 +7,19 @@ const {
     TextInputBuilder,
     TextInputStyle
 } = require('discord.js');
-const fs = require('fs');
-
-const DB_PATH = './database.json';
+const database = require('../db.js');
 
 function cargarDB() {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+    const polls = database.getAllPolls();
+    const result = {};
+    for (const p of polls) result[p.id] = p;
+    return { polls: result };
 }
 
 function guardarDB(data) {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
+    for (const [id, poll] of Object.entries(data.polls || {})) {
+        database.setPoll(id, poll);
+    }
 }
 
 // Emojis de opciones

@@ -1,9 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = './database.json';
+const DB_JSON = './database.json';
+const DB_SQLITE = './tsde.db';
 const BACKUP_DIR = './backups';
-const MAX_BACKUPS = 7; // Mantener solo los últimos 7 días
+const MAX_BACKUPS = 7;
 
 function asegurarDirectorioBackup() {
     if (!fs.existsSync(BACKUP_DIR)) {
@@ -22,14 +23,21 @@ function hacerBackup() {
             .replace(/:/g, '-')
             .split('.')[0];
 
-        const nombreArchivo = `database_${fecha}.json`;
-        const rutaDestino = path.join(BACKUP_DIR, nombreArchivo);
+        // Backup SQLite (archivo principal)
+        if (fs.existsSync(DB_SQLITE)) {
+            const nombreSQLite = `tsde_${fecha}.db`;
+            fs.copyFileSync(DB_SQLITE, path.join(BACKUP_DIR, nombreSQLite));
+            console.log(`[BAK] ✅ Backup SQLite creado: ${nombreSQLite}`);
+        }
 
-        fs.copyFileSync(DB_PATH, rutaDestino);
-        console.log(`[BAK] ✅ Backup creado: ${nombreArchivo}`);
+        // Backup JSON (por compatibilidad mientras exista)
+        if (fs.existsSync(DB_JSON)) {
+            const nombreJSON = `database_${fecha}.json`;
+            fs.copyFileSync(DB_JSON, path.join(BACKUP_DIR, nombreJSON));
+        }
 
         limpiarBackupsAntiguos();
-        return nombreArchivo;
+        return fecha;
     } catch (e) {
         console.error('[BAK] ❌ Error haciendo backup:', e.message);
         return null;
@@ -38,21 +46,28 @@ function hacerBackup() {
 
 function limpiarBackupsAntiguos() {
     try {
-        const archivos = fs.readdirSync(BACKUP_DIR)
-            .filter(f => f.startsWith('database_') && f.endsWith('.json'))
-            .map(f => ({
-                nombre: f,
-                ruta: path.join(BACKUP_DIR, f),
-                fecha: fs.statSync(path.join(BACKUP_DIR, f)).mtime
-            }))
+        // Limpiar backups SQLite
+        const archivosSQLite = fs.readdirSync(BACKUP_DIR)
+            .filter(f => f.startsWith('tsde_') && f.endsWith('.db'))
+            .map(f => ({ nombre: f, ruta: path.join(BACKUP_DIR, f), fecha: fs.statSync(path.join(BACKUP_DIR, f)).mtime }))
             .sort((a, b) => b.fecha - a.fecha);
 
-        // Borrar los que excedan el máximo
-        if (archivos.length > MAX_BACKUPS) {
-            const aEliminar = archivos.slice(MAX_BACKUPS);
-            aEliminar.forEach(archivo => {
+        if (archivosSQLite.length > MAX_BACKUPS) {
+            archivosSQLite.slice(MAX_BACKUPS).forEach(archivo => {
                 fs.unlinkSync(archivo.ruta);
                 console.log(`[BAK] 🗑️ Backup antiguo eliminado: ${archivo.nombre}`);
+            });
+        }
+
+        // Limpiar backups JSON
+        const archivosJSON = fs.readdirSync(BACKUP_DIR)
+            .filter(f => f.startsWith('database_') && f.endsWith('.json'))
+            .map(f => ({ nombre: f, ruta: path.join(BACKUP_DIR, f), fecha: fs.statSync(path.join(BACKUP_DIR, f)).mtime }))
+            .sort((a, b) => b.fecha - a.fecha);
+
+        if (archivosJSON.length > MAX_BACKUPS) {
+            archivosJSON.slice(MAX_BACKUPS).forEach(archivo => {
+                fs.unlinkSync(archivo.ruta);
             });
         }
     } catch (e) {

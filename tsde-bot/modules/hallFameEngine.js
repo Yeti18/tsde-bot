@@ -8,19 +8,20 @@ const {
     TextInputStyle,
     MessageFlags
 } = require('discord.js');
-const fs = require('fs');
+const database = require('../db.js');
 const config = require('../config.json');
 
-const DB_PATH = './database.json';
 
 // --- BASE DE DATOS ---
 
 function cargarDB() {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+    const fs = require('fs');
+    return JSON.parse(fs.readFileSync('./database.json', 'utf8'));
 }
 
 function guardarDB(data) {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
+    const fs = require('fs');
+    fs.writeFileSync('./database.json', JSON.stringify(data, null, 2), 'utf8');
 }
 
 function cargarHoF() {
@@ -81,7 +82,7 @@ function construirEmbedHoFCompleto(hof) {
             embed.addFields({
                 name: `${cat.emoji} ${cat.label}`,
                 value: entradas.map(e =>
-                    `**${e.nombre}** — ${e.logro} *(${e.fecha})* \`ID: ${e.id}\``
+                    `**${e.nombre}** — ${e.logro} *(${e.fecha})*`
                 ).join('\n'),
                 inline: false
             });
