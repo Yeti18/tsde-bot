@@ -2,6 +2,10 @@ const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const fs = require('fs');
 const http = require('http');
 const config = require('./config.json');
+const database = require('./db.js');
+
+// Conectar SQLite al arrancar
+database.conectar();
 
 // Cliente de Discord con los permisos necesarios
 const client = new Client({
@@ -25,22 +29,18 @@ for (const file of handlerFiles) {
 }
 
 // --- SERVIDOR HTTP PARA LA WEB DE DONACIONES ---
-// Expone el número de jugadores online sin tokens ni datos sensibles
-
 const HTTP_PORT = 3000;
 
 http.createServer((req, res) => {
-    // CORS para que la web pueda consultarlo desde cualquier dominio
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', 'application/json');
 
     if (req.url === '/players') {
         try {
-            const db = JSON.parse(fs.readFileSync('./database.json', 'utf8'));
-            const jugadores = db.jugadores_online || [];
+            const online = database.countJugadoresOnline();
             res.writeHead(200);
             res.end(JSON.stringify({
-                online: jugadores.length,
+                online,
                 max: config.servidor?.maxJugadores || 70,
                 servidor: config.servidor?.nombre || 'TSDE Arkeanos',
                 mapa: config.servidor?.mapa || 'Ragnarok'
@@ -57,5 +57,5 @@ http.createServer((req, res) => {
     console.log(`[API] Servidor HTTP activo en puerto ${HTTP_PORT}`);
 });
 
-// Arrancar el bot — lee de Secrets de Replit primero, luego config.json
+// Arrancar el bot
 client.login(process.env.DISCORD_TOKEN || config.token);
