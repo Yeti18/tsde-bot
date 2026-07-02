@@ -1,16 +1,11 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require('discord.js');
-const fs = require('fs');
 const config = require('../../config.json');
+const database = require('../../db.js');
 
-const DB_PATH = './database.json';
+const DB_PATH = './database.json'; // ya no se usa, SQLite
 
-function cargarDB() {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-}
-
-function guardarDB(data) {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
-}
+function cargarDB() { return {}; }
+function guardarDB() {}
 
 // Niveles de sanción progresiva
 const NIVELES = {
@@ -60,70 +55,56 @@ module.exports = {
         const usuario = interaction.options.getUser('usuario');
         const motivo = interaction.options.getString('motivo') || 'Sin motivo especificado';
 
-        const db = cargarDB();
-        if (!db.sanciones) db.sanciones = {};
-        if (!db.penalizados) db.penalizados = [];
-        if (!db.advertencias) db.advertencias = [];
-
         // --- SANCIONAR ---
         if (sub === 'sancionar') {
-            if (!db.sanciones[usuario.id]) {
-                db.sanciones[usuario.id] = {
-                    discordId: usuario.id,
-                    discordUsername: usuario.username,
-                    historial: [],
-                    nivelActual: 0
-                };
+            let sancionData = database.getSancion(usuario.id);
+            if (!sancionData) {
+                sancionData = { discordId: usuario.id, discordUsername: usuario.username, nivelActual: 0, historial: [] };
             }
 
-            const sancion = db.sanciones[usuario.id];
-            sancion.nivelActual = Math.min(sancion.nivelActual + 1, 4);
-            const nivel = NIVELES[sancion.nivelActual];
+            sancionData.nivelActual = Math.min(sancionData.nivelActual + 1, 4);
+            const nivel = NIVELES[sancionData.nivelActual];
 
-            sancion.historial.push({
-                nivel: sancion.nivelActual,
+            sancionData.historial.push({
+                nivel: sancionData.nivelActual,
                 motivo,
                 adminId: interaction.user.id,
                 adminUsername: interaction.user.username,
                 fecha: new Date().toISOString()
             });
 
-            // Aplicar efectos según nivel
-            if (sancion.nivelActual >= 3) {
-                // Nivel 3+ → bloquear de eventos
-                const nombreArk = db.jugadores?.[usuario.id]?.nombreArk || usuario.username;
-                if (!db.penalizados.includes(nombreArk)) {
-                    db.penalizados.push(nombreArk);
-                }
+            // Nivel 3+ → bloquear de eventos
+            if (sancionData.nivelActual >= 3) {
+                const jugador = database.getJugador(usuario.id);
+                const nombreArk = jugador?.nombre_ark || usuario.username;
+                database.addPenalizado(nombreArk);
             }
 
-            // Guardar advertencia en el registro de advertencias también
-            db.advertencias.push({
+            // Guardar sanción y advertencia
+            database.setSancion(sancionData);
+            database.addAdvertencia({
                 jugadorId: usuario.id,
                 jugadorUsername: usuario.username,
                 motivo,
                 adminId: interaction.user.id,
                 adminUsername: interaction.user.username,
-                nivel: sancion.nivelActual,
+                nivel: sancionData.nivelActual,
                 fecha: new Date().toISOString()
             });
 
-            guardarDB(db);
-
             // Embed del resultado
             const embed = new EmbedBuilder()
-                .setTitle(`${nivel.emoji} Sanción aplicada — Nivel ${sancion.nivelActual}`)
+                .setTitle(`${nivel.emoji} Sanción aplicada — Nivel ${sancionData.nivelActual}`)
                 .setColor(nivel.color)
                 .addFields(
                     { name: '👤 Jugador', value: `${usuario.username} (<@${usuario.id}>)`, inline: true },
                     { name: '📋 Tipo', value: nivel.nombre, inline: true },
                     { name: '📝 Motivo', value: motivo, inline: false },
                     { name: 'ℹ️ Efecto', value: nivel.descripcion, inline: false },
-                    { name: '📊 Historial', value: `${sancion.nivelActual}/4 sanciones acumuladas`, inline: true }
+                    { name: '📊 Historial', value: `${sancionData.nivelActual}/4 sanciones acumuladas`, inline: true }
                 )
                 .setTimestamp();
 
-            // Avisar en #logs
             try {
                 if (config.canales.logs) {
                     const canalLogs = await client.channels.fetch(config.canales.logs);
@@ -131,7 +112,6 @@ module.exports = {
                 }
             } catch (e) {}
 
-            // DM al jugador
             try {
                 await usuario.send({
                     embeds: [new EmbedBuilder()
@@ -148,27 +128,23 @@ module.exports = {
                 });
             } catch (e) {}
 
-            // Advertencia especial si llega a nivel 4
-            const avisoNivel4 = sancion.nivelActual === 4
+            const avisoNivel4 = sancionData.nivelActual === 4
                 ? '\n\n🔨 **Este jugador ha acumulado 4 sanciones. Se recomienda valorar un baneo permanente.**'
                 : '';
 
-            await interaction.editReply({
-                embeds: [embed],
-                content: avisoNivel4 || undefined
-            });
+            await interaction.editReply({ embeds: [embed], content: avisoNivel4 || undefined });
         }
 
         // --- PERDONAR ---
         if (sub === 'perdonar') {
-            const sancion = db.sanciones?.[usuario.id];
-            if (!sancion || sancion.nivelActual === 0) {
+            const sancionData = database.getSancion(usuario.id);
+            if (!sancionData || sancionData.nivelActual === 0) {
                 return interaction.editReply({ content: `ℹ️ ${usuario.username} no tiene sanciones activas.` });
             }
 
-            const nivelAnterior = sancion.nivelActual;
-            sancion.nivelActual = 0;
-            sancion.historial.push({
+            const nivelAnterior = sancionData.nivelActual;
+            sancionData.nivelActual = 0;
+            sancionData.historial.push({
                 nivel: 0,
                 motivo: `PERDÓN: ${motivo}`,
                 adminId: interaction.user.id,
@@ -176,17 +152,13 @@ module.exports = {
                 fecha: new Date().toISOString()
             });
 
-            // Quitar de penalizados si estaba
-            const nombreArk = db.jugadores?.[usuario.id]?.nombreArk || usuario.username;
-            db.penalizados = db.penalizados.filter(p => p !== nombreArk);
+            const jugador = database.getJugador(usuario.id);
+            const nombreArk = jugador?.nombre_ark || usuario.username;
+            database.removePenalizado(nombreArk);
+            database.setSancion(sancionData);
 
-            guardarDB(db);
-
-            // DM al jugador
             try {
-                await usuario.send({
-                    content: `✅ Tu historial de sanciones en TSDE Arkeanos ha sido perdonado por la administración. ¡Bienvenido de vuelta! 🦖`
-                });
+                await usuario.send({ content: `✅ Tu historial de sanciones en TSDE Arkeanos ha sido perdonado por la administración. ¡Bienvenido de vuelta! 🦖` });
             } catch (e) {}
 
             await interaction.editReply({
@@ -205,13 +177,13 @@ module.exports = {
 
         // --- HISTORIAL ---
         if (sub === 'historial') {
-            const sancion = db.sanciones?.[usuario.id];
+            const sancionData = database.getSancion(usuario.id);
 
-            if (!sancion || sancion.historial.length === 0) {
+            if (!sancionData || sancionData.historial.length === 0) {
                 return interaction.editReply({ content: `✅ ${usuario.username} no tiene historial de sanciones.` });
             }
 
-            const historialTexto = sancion.historial.slice(-5).map((h, i) => {
+            const historialTexto = sancionData.historial.slice(-5).map((h, i) => {
                 const nivel = h.nivel === 0 ? '✅ PERDÓN' : `${NIVELES[h.nivel]?.emoji || '⚠️'} Nivel ${h.nivel}`;
                 const fecha = new Date(h.fecha).toLocaleDateString('es-ES');
                 return `**${nivel}** — ${h.motivo} *(${fecha})*`;
@@ -220,9 +192,9 @@ module.exports = {
             await interaction.editReply({
                 embeds: [new EmbedBuilder()
                     .setTitle(`📋 Historial de sanciones — ${usuario.username}`)
-                    .setColor(sancion.nivelActual > 0 ? NIVELES[sancion.nivelActual].color : 0x2ECC71)
+                    .setColor(sancionData.nivelActual > 0 ? NIVELES[sancionData.nivelActual].color : 0x2ECC71)
                     .addFields(
-                        { name: '📊 Nivel actual', value: `${sancion.nivelActual}/4 — ${NIVELES[sancion.nivelActual]?.nombre || 'Sin sanciones'}`, inline: true },
+                        { name: '📊 Nivel actual', value: `${sancionData.nivelActual}/4 — ${NIVELES[sancionData.nivelActual]?.nombre || 'Sin sanciones'}`, inline: true },
                         { name: '📜 Últimas sanciones', value: historialTexto, inline: false }
                     )
                 ]

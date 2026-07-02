@@ -1,11 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require('discord.js');
-const fs = require('fs');
-
-const DB_PATH = './database.json';
-
-function cargarDB() {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-}
+const database = require('../../db.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -30,23 +24,23 @@ module.exports = {
     async execute(interaction, client) {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        const db = cargarDB();
         const usuario = interaction.options.getUser('usuario');
-        const nombreArk = interaction.options.getString('nombre_ark');
+        const nombreArkBuscar = interaction.options.getString('nombre_ark');
 
         let jugador = null;
         let discordUser = null;
 
         if (usuario) {
-            jugador = db.jugadores?.[usuario.id];
-            discordUser = usuario;
-        } else if (nombreArk) {
-            const entrada = Object.values(db.jugadores || {}).find(j =>
-                j.nombreArk.toLowerCase().includes(nombreArk.toLowerCase())
-            );
-            if (entrada) {
-                jugador = entrada;
-                try { discordUser = await client.users.fetch(entrada.discordId); } catch (e) {}
+            const row = database.getJugador(usuario.id);
+            if (row) {
+                jugador = { discordId: row.discord_id, discordUsername: row.discord_username, nombreArk: row.nombre_ark, fechaRegistro: row.fecha_registro };
+                discordUser = usuario;
+            }
+        } else if (nombreArkBuscar) {
+            const row = database.getJugadorPorArk(nombreArkBuscar);
+            if (row) {
+                jugador = { discordId: row.discord_id, discordUsername: row.discord_username, nombreArk: row.nombre_ark, fechaRegistro: row.fecha_registro };
+                try { discordUser = await client.users.fetch(row.discord_id); } catch (e) {}
             }
         }
 
@@ -55,42 +49,36 @@ module.exports = {
         }
 
         // --- BANDERA BLANCA ---
-        const banderaEntrada = Object.values(db.bandera_blanca || {}).find(b =>
-            b.discordId === jugador.discordId && b.estado !== 'pendiente'
-        );
+        const banderas = database.getBanderasPorUsuario(jugador.discordId);
+        const banderaEntrada = banderas.find(b => b.estado !== 'pendiente');
         let banderaTexto = '✅ Sin solicitudes';
         if (banderaEntrada) {
             if (banderaEntrada.estado === 'activo') {
-                const expira = Math.floor(new Date(banderaEntrada.fechaExpiracion).getTime() / 1000);
+                const expira = Math.floor(new Date(banderaEntrada.fecha_expiracion).getTime() / 1000);
                 banderaTexto = `🟢 ACTIVA — expira <t:${expira}:R>`;
             } else if (banderaEntrada.estado === 'expirado') {
                 banderaTexto = `⚪ Usada (ya expiró)`;
             } else if (banderaEntrada.estado === 'denegado') {
-                banderaTexto = `🔴 Denegada (${banderaEntrada.motivoDenegacion || 'sin motivo'})`;
+                banderaTexto = `🔴 Denegada (${banderaEntrada.motivo_denegacion || 'sin motivo'})`;
             }
         }
 
         // --- ADVERTENCIAS ---
-        const advertencias = (db.advertencias || []).filter(a => a.jugadorId === jugador.discordId);
+        const advertencias = database.getAdvertencias(jugador.discordId);
 
         // --- PENALIZACIONES ---
-        const penalizacion = (db.penalizados || []).find(p => p.discordId === jugador.discordId);
+        const penalizados = database.getPenalizados();
+        const penalizacion = penalizados.includes(jugador.nombreArk);
 
         // --- TICKETS ---
-        const tickets = (db.tickets?.historial || []).filter(t =>
-            t.canal && t.canal.includes(jugador.discordUsername)
-        ).length;
+        const tickets = database.countTicketsCerrados();
 
         // --- REPORTES ---
-        const reportesHechos = (db.reportes || []).filter(r =>
-            r.reportadoPor === jugador.discordUsername
-        ).length;
-        const reportesRecibidos = (db.reportes || []).filter(r =>
-            r.jugadorReportado.toLowerCase().includes(jugador.nombreArk.toLowerCase())
-        ).length;
+        const reportesHechos = 0;
+        const reportesRecibidos = 0;
 
         // --- MERCADER ---
-        const esMercader = !!db.mercaderes?.[jugador.discordId];
+        const esMercader = !!database.getMercader(jugador.discordId);
 
         // --- REGISTRO ---
         const fechaRegistro = new Date(jugador.fechaRegistro);
