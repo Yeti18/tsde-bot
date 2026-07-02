@@ -590,7 +590,71 @@ async function comprobarExpiraciones(client) {
     let huboCambios = false;
 
     for (const solicitud of Object.values(bandera)) {
-        if (solicitud.estado === 'activo' && new Date(solicitud.fechaExpiracion).getTime() <= ahora) {
+        if (solicitud.estado !== 'activo') continue;
+
+        const expiracion = new Date(solicitud.fechaExpiracion).getTime();
+        const en24h = expiracion - (24 * 60 * 60 * 1000);
+
+        // --- RECORDATORIO 24H ANTES ---
+        if (!solicitud.aviso24hEnviado && ahora >= en24h && ahora < expiracion) {
+            solicitud.aviso24hEnviado = true;
+            huboCambios = true;
+
+            // DM al jugador
+            let dmFallido = false;
+            try {
+                const usuario = await client.users.fetch(solicitud.discordId);
+                await usuario.send({
+                    embeds: [new (require('discord.js').EmbedBuilder)()
+                        .setTitle('⚠️ Tu Bandera Blanca expira pronto')
+                        .setColor(0xF39C12)
+                        .setDescription(
+                            `Tu protección de Bandera Blanca expira en menos de **24 horas**.\n\n` +
+                            `Expira: <t:${Math.floor(expiracion / 1000)}:F>\n\n` +
+                            `Después de esa hora formarás parte del PvP normal del servidor. ` +
+                            `¡Asegúrate de tener tus dinos y base bien protegidos! 🦖`
+                        )
+                    ]
+                });
+            } catch (e) {
+                dmFallido = true;
+            }
+
+            // Fallback si falla el DM
+            if (dmFallido && solicitud.canalId) {
+                try {
+                    const canalPrivado = await client.channels.fetch(solicitud.canalId);
+                    await canalPrivado.permissionOverwrites.create(solicitud.discordId, {
+                        ViewChannel: true,
+                        ReadMessageHistory: true
+                    });
+                    await canalPrivado.send(
+                        `<@${solicitud.discordId}> — tu Bandera Blanca expira en menos de 24 horas (<t:${Math.floor(expiracion / 1000)}:R>). ¡Prepara tu base! 🦖`
+                    );
+                } catch (e) {}
+            }
+
+            // Aviso en #logs para que los admins lo sepan
+            try {
+                if (config.canales.logs) {
+                    const canalLogs = await client.channels.fetch(config.canales.logs);
+                    await canalLogs.send({
+                        embeds: [new (require('discord.js').EmbedBuilder)()
+                            .setTitle('⚠️ Bandera Blanca expira en 24h')
+                            .setColor(0xF39C12)
+                            .addFields(
+                                { name: '🎮 Jugador', value: solicitud.nombreArk, inline: true },
+                                { name: '👤 Discord', value: solicitud.discordUsername, inline: true },
+                                { name: '⏰ Expira', value: `<t:${Math.floor(expiracion / 1000)}:F>`, inline: false }
+                            )
+                        ]
+                    });
+                }
+            } catch (e) {}
+        }
+
+        // --- EXPIRACIÓN REAL ---
+        if (expiracion <= ahora) {
             solicitud.estado = 'expirado';
             huboCambios = true;
 
