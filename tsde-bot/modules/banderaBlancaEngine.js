@@ -269,7 +269,49 @@ async function handleButton(interaction, client) {
     const id = interaction.customId;
 
     if (id === 'bb_solicitar') {
+        // Mostrar info primero — mensaje efímero con botón de confirmación
+        await interaction.reply({
+            embeds: [new EmbedBuilder()
+                .setTitle('🏳️ Bandera Blanca — Antes de continuar')
+                .setColor(0xF39C12)
+                .setDescription(
+                    '**Asegúrate de cumplir estos requisitos antes de solicitar:**\n\n' +
+                    '✅ Has aprendido el engrama **WHITE FLAG PROTECTION**\n' +
+                    '✅ Has crafteado la Bandera *(10 Piel, 50 Madera, 50 Fibra)*\n' +
+                    '✅ La has colocado **visible** cerca de tu base\n\n' +
+                    '⚠️ Solo válida los **primeros días** en el servidor\n' +
+                    '🚫 Atacar durante la protección = **baneo inmediato**\n\n' +
+                    '*Si ya tienes todo listo, pulsa el botón para continuar.*'
+                )
+            ],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('bb_confirmar_solicitud')
+                    .setLabel('✅ Todo listo, solicitar ahora')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId('bb_cancelar_solicitud')
+                    .setLabel('❌ Cancelar')
+                    .setStyle(ButtonStyle.Secondary)
+            )],
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    if (id === 'bb_confirmar_solicitud') {
         await interaction.showModal(construirModalSolicitud());
+        return;
+    }
+
+    if (id === 'bb_cancelar_solicitud') {
+        await interaction.update({
+            embeds: [new EmbedBuilder()
+                .setColor(0x95A5A6)
+                .setDescription('❌ Solicitud cancelada. Cuando tengas todo listo, vuelve a pulsar el botón de Bandera Blanca en #tickets.')
+            ],
+            components: []
+        });
         return;
     }
 
