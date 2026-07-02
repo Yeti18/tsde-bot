@@ -141,6 +141,11 @@ function crearTablas() {
         CREATE TABLE IF NOT EXISTS jugadores_online (
             nombre TEXT PRIMARY KEY
         );
+
+        CREATE TABLE IF NOT EXISTS mercado_anuncios (
+            id TEXT PRIMARY KEY,
+            datos TEXT NOT NULL
+        );
     `);
 }
 
@@ -479,6 +484,29 @@ function countJugadoresOnline() {
     return db.prepare('SELECT COUNT(*) as total FROM jugadores_online').get().total;
 }
 
+// ─────────────────────────────────────────────
+// MERCADO ANUNCIOS
+// ─────────────────────────────────────────────
+
+function getMercadoAnuncio(id) {
+    const row = db.prepare('SELECT * FROM mercado_anuncios WHERE id = ?').get(id);
+    return row ? JSON.parse(row.datos) : null;
+}
+
+function setMercadoAnuncio(id, datos) {
+    return db.prepare('INSERT OR REPLACE INTO mercado_anuncios (id, datos) VALUES (?, ?)').run(id, JSON.stringify(datos));
+}
+
+function removeMercadoAnuncio(id) {
+    return db.prepare('DELETE FROM mercado_anuncios WHERE id = ?').run(id);
+}
+
+function getMercadoAnunciosPorMercader(discordId) {
+    return db.prepare('SELECT * FROM mercado_anuncios').all()
+        .map(r => JSON.parse(r.datos))
+        .filter(a => a.discordId === discordId);
+}
+
 module.exports = {
     conectar,
     // Jugadores
@@ -512,6 +540,8 @@ module.exports = {
     // Eventos/Torneos activos
     getEventosActivos, setEventoActivo, removeEventoActivo,
     getTorneosActivos, setTorneoActivo, removeTorneoActivo,
+    // Mercado anuncios
+    getMercadoAnuncio, setMercadoAnuncio, removeMercadoAnuncio, getMercadoAnunciosPorMercader,
     // Jugadores online
     setJugadoresOnline, getJugadoresOnline, countJugadoresOnline
 };
