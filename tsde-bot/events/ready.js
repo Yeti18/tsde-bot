@@ -4,6 +4,7 @@ const { iniciarMonitorServidor } = require('../modules/servidorEngine.js');
 const { asegurarMensajeBienvenida } = require('../modules/reglasEngine.js');
 const { iniciarComprobacionExpiraciones } = require('../modules/banderaBlancaEngine.js');
 const { asegurarMensajeTickets } = require('../modules/ticketEngine.js');
+const { iniciarBackupAutomatico } = require('../modules/backupEngine.js');
 
 module.exports = {
     name: 'clientReady',
@@ -13,6 +14,7 @@ module.exports = {
         client.user.setActivity('TSDE Arkeanos 🦖', { type: 0 });
 
         // Arrancar sistemas automáticos
+        iniciarBackupAutomatico(client);
         await iniciarStats(client);
         await iniciarVotaciones(client);
         await iniciarMonitorServidor(client);
