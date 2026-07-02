@@ -108,11 +108,11 @@ function construirEmbedTickets() {
 function construirBotonesTickets() {
     return [
         new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('tkt_incubadora').setLabel('🥚 Incubadora').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('tkt_compra').setLabel('🛒 Compra tienda').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('tkt_reporte').setLabel('⚠️ Reportar jugador').setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId('tkt_soporte').setLabel('🦖 Soporte general').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('bb_solicitar').setLabel('🏳️ Bandera Blanca').setStyle(ButtonStyle.Primary)
+            new ButtonBuilder().setCustomId('tkt_incubadora').setLabel('🥚 Incubadora').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('bb_solicitar').setLabel('🏳️ Bandera Blanca').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('tkt_compra').setLabel('🛒 Compra tienda').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('tkt_reporte').setLabel('⚠️ Reportar jugador').setStyle(ButtonStyle.Danger)
         )
     ];
 }
