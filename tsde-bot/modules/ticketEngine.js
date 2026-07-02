@@ -323,20 +323,31 @@ async function handleEclosionado(interaction, client, incubadoraId) {
 
     const nuevoPIN = generarPinAleatorio();
 
+    // Actualizar el mensaje del canal sin mostrar el PIN (visible para todos)
     await interaction.update({
         embeds: [new EmbedBuilder()
             .setTitle('🥚 Huevos eclosionados')
+            .setColor(0x2ECC71)
+            .setDescription('✅ Huevos eclosionados correctamente. El admin está actualizando la incubadora.')
+        ],
+        components: []
+    });
+
+    // Enviar el PIN SOLO al admin por ephemeral (nadie más lo ve)
+    await interaction.followUp({
+        embeds: [new EmbedBuilder()
+            .setTitle(`🔑 Nuevo PIN — Incubadora ${incubadoraId}`)
             .setColor(0xF39C12)
             .setDescription(
-                `✅ Huevos eclosionados correctamente.\n\n` +
-                `**Nuevo PIN para la Incubadora ${incubadoraId}:** \`${nuevoPIN}\`\n\n` +
+                `**Nuevo PIN:** \`${nuevoPIN}\`\n\n` +
                 `Cambia el PIN en el juego y pulsa el botón cuando esté listo.`
             )
         ],
         components: [new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`tkt_pinok_${incubadoraId}_${nuevoPIN}`).setLabel('🔑 PIN actualizado en el juego').setStyle(ButtonStyle.Primary),
             new ButtonBuilder().setCustomId('tkt_cerrar').setLabel('🔒 Cerrar ticket').setStyle(ButtonStyle.Secondary)
-        )]
+        )],
+        flags: MessageFlags.Ephemeral
     });
 }
 
