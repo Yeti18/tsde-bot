@@ -146,6 +146,11 @@ function crearTablas() {
             id TEXT PRIMARY KEY,
             datos TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS taquillas (
+            clave TEXT PRIMARY KEY,
+            valor TEXT NOT NULL
+        );
     `);
 }
 
@@ -485,6 +490,21 @@ function countJugadoresOnline() {
 }
 
 // ─────────────────────────────────────────────
+// TAQUILLAS (Coliseo)
+// ─────────────────────────────────────────────
+
+function getTaquillas() {
+    const rows = db.prepare('SELECT * FROM taquillas').all();
+    const result = { evento_activo: null, asignaciones: [] };
+    rows.forEach(r => { try { result[r.clave] = JSON.parse(r.valor); } catch(e) {} });
+    return result;
+}
+
+function setTaquillas(clave, valor) {
+    return db.prepare('INSERT OR REPLACE INTO taquillas (clave, valor) VALUES (?, ?)').run(clave, JSON.stringify(valor));
+}
+
+// ─────────────────────────────────────────────
 // MERCADO ANUNCIOS
 // ─────────────────────────────────────────────
 
@@ -540,6 +560,8 @@ module.exports = {
     // Eventos/Torneos activos
     getEventosActivos, setEventoActivo, removeEventoActivo,
     getTorneosActivos, setTorneoActivo, removeTorneoActivo,
+    // Taquillas
+    getTaquillas, setTaquillas,
     // Mercado anuncios
     getMercadoAnuncio, setMercadoAnuncio, removeMercadoAnuncio, getMercadoAnunciosPorMercader,
     // Jugadores online
