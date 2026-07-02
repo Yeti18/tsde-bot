@@ -2,22 +2,16 @@ const {
     EmbedBuilder,
     AttachmentBuilder
 } = require('discord.js');
-const fs = require('fs');
 const config = require('../config.json');
-
-const TAQUILLAS_FILE = './taquillas.json';
-
-// --- BASE DE DATOS ---
+const database = require('../db.js');
 
 function cargarTaquillas() {
-    if (fs.existsSync(TAQUILLAS_FILE)) {
-        return JSON.parse(fs.readFileSync(TAQUILLAS_FILE, 'utf8'));
-    }
-    return { evento_activo: null, asignaciones: [] };
+    return database.getTaquillas();
 }
 
 function guardarTaquillas(data) {
-    fs.writeFileSync(TAQUILLAS_FILE, JSON.stringify(data, null, 2), 'utf8');
+    database.setTaquillas('evento_activo', data.evento_activo || null);
+    database.setTaquillas('asignaciones', data.asignaciones || []);
 }
 
 // --- HELPERS ---
