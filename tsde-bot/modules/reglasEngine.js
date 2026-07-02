@@ -108,15 +108,6 @@ function construirModalNombreArk() {
                 .setMinLength(2)
                 .setMaxLength(50)
                 .setRequired(true)
-        ),
-        new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-                .setCustomId('nombre_personaje')
-                .setLabel('Nombre de tu personaje (si es distinto)')
-                .setPlaceholder('Deja vacío si es el mismo que arriba...')
-                .setStyle(TextInputStyle.Short)
-                .setMaxLength(50)
-                .setRequired(false)
         )
     );
 
@@ -193,7 +184,7 @@ async function handleModal(interaction, client) {
     if (interaction.customId === 'reg_modal_nombre') {
         try {
             const nombreArk = interaction.fields.getTextInputValue('nombre_ark').trim();
-            const nombrePersonaje = interaction.fields.getTextInputValue('nombre_personaje').trim();
+            const nombrePersonaje = null;
 
             const guild = interaction.guild || await client.guilds.fetch(config.guildId);
             const member = interaction.guild
