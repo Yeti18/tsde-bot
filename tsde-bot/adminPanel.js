@@ -838,6 +838,11 @@ function iniciarAdminPanel(client) {
         }
     });
 
+    // Cerrar limpiamente al salir para liberar el puerto
+    process.on('SIGINT', () => { server.close(); process.exit(0); });
+    process.on('SIGTERM', () => { server.close(); process.exit(0); });
+    process.on('exit', () => { server.close(); });
+
     server.listen(ADMIN_PORT, () => {
         console.log(`[ADM] Panel de admin activo en puerto ${ADMIN_PORT}`);
     });
