@@ -153,7 +153,7 @@ async function asegurarMensajeBienvenida(client) {
         const botones = construirBotonRegistro();
 
         // Intentar encontrar el mensaje por ID guardado en SQLite
-        const msgIdGuardado = database.getMercadoAnuncio('bienvenida_msg_id');
+        const msgIdGuardado = db.getMercadoAnuncio('bienvenida_msg_id');
         
         if (msgIdGuardado) {
             try {
@@ -163,7 +163,7 @@ async function asegurarMensajeBienvenida(client) {
                 return;
             } catch (e) {
                 // Mensaje no encontrado, creamos uno nuevo
-                database.removeMercadoAnuncio('bienvenida_msg_id');
+                db.removeMercadoAnuncio('bienvenida_msg_id');
             }
         }
 
@@ -173,12 +173,12 @@ async function asegurarMensajeBienvenida(client) {
 
         if (existente) {
             await existente.edit({ embeds: [embed], components: [botones] });
-            database.setMercadoAnuncio('bienvenida_msg_id', { id: existente.id });
+            db.setMercadoAnuncio('bienvenida_msg_id', { id: existente.id });
             console.log('[REG] Mensaje de bienvenida encontrado y actualizado en #bienvenida');
         } else {
             const msg = await canal.send({ embeds: [embed], components: [botones] });
             await msg.pin().catch(() => {});
-            database.setMercadoAnuncio('bienvenida_msg_id', { id: msg.id });
+            db.setMercadoAnuncio('bienvenida_msg_id', { id: msg.id });
             console.log('[REG] Mensaje de bienvenida creado en #bienvenida');
         }
     } catch (e) {
