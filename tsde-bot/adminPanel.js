@@ -235,6 +235,15 @@ const HTML_PANEL = `<!DOCTYPE html>
       </div>
     </div>
   </div>
+  <div class="section">
+    <h2>📢 Mensajes broadcast guardados</h2>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input id="bc-nombre" placeholder="Nombre (ej: Aviso evento laberinto)" style="flex:1">
+      <textarea id="bc-texto" placeholder="Texto del mensaje broadcast..." style="flex:2;height:60px;resize:vertical"></textarea>
+      <button class="btn btn-green" style="align-self:flex-end" onclick="guardarBroadcast()">💾 Guardar</button>
+    </div>
+    <div id="lista-broadcasts-guardados"></div>
+  </div>
 </div>
 
 <!-- LOGS -->
@@ -279,6 +288,7 @@ async function loadPage(name) {
   if (name === 'banderas') await cargarBanderas();
   if (name === 'incubadoras') await cargarIncubadoras();
   if (name === 'mercado') await cargarMercado();
+  if (name === 'rcon') await cargarBroadcastsGuardados();
   if (name === 'logs') await cargarLogs();
 }
 
@@ -547,6 +557,50 @@ async function reiniciarBot() {
   toast('🔄 Reiniciando...', '#F39C12');
 }
 
+// BROADCASTS GUARDADOS
+async function cargarBroadcastsGuardados() {
+  const data = await api('broadcasts-guardados');
+  const lista = document.getElementById('lista-broadcasts-guardados');
+  if (!data.length) { lista.innerHTML = '<em style="color:#666">No hay mensajes guardados aún. Crea el primero arriba.</em>'; return; }
+  lista.innerHTML = data.map(b => \`
+    <div style="background:#111;border:1px solid #333;border-radius:6px;padding:12px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <strong style="color:#4CAF50;flex:1">\${b.nombre}</strong>
+        <button class="btn btn-green" style="font-size:11px" onclick="enviarBroadcastGuardado('\${b.id}')">📢 Broadcast</button>
+        <button class="btn btn-red" style="font-size:11px" onclick="borrarBroadcast('\${b.id}')">🗑️</button>
+      </div>
+      <div style="font-size:13px;color:#aaa;white-space:pre-wrap">\${b.texto}</div>
+    </div>
+  \`).join('');
+}
+
+async function guardarBroadcast() {
+  const nombre = document.getElementById('bc-nombre').value.trim();
+  const texto = document.getElementById('bc-texto').value.trim();
+  if (!nombre || !texto) return toast('Rellena nombre y mensaje', '#f44');
+  const r = await api('broadcasts-guardados', 'POST', { nombre, texto });
+  toast(r.ok ? '✅ Guardado' : '❌ Error', r.ok ? '#4CAF50' : '#f44');
+  document.getElementById('bc-nombre').value = '';
+  document.getElementById('bc-texto').value = '';
+  cargarBroadcastsGuardados();
+}
+
+async function enviarBroadcastGuardado(id) {
+  const data = await api('broadcasts-guardados');
+  const bc = data.find(b => b.id === id);
+  if (!bc) return toast('No encontrado', '#f44');
+  const r = await api('rcon', 'POST', { comando: 'Broadcast ' + bc.texto });
+  toast(r.error ? '❌ Error RCON' : '✅ Mensaje enviado al servidor', r.error ? '#f44' : '#4CAF50');
+  if (!r.error) document.getElementById('rcon-output').textContent = 'Broadcast enviado: ' + bc.texto;
+}
+
+async function borrarBroadcast(id) {
+  if (!confirm('¿Borrar este mensaje?')) return;
+  const r = await api('broadcasts-guardados/' + id, 'DELETE');
+  toast(r.ok ? '🗑️ Eliminado' : '❌ Error', r.ok ? '#4CAF50' : '#f44');
+  cargarBroadcastsGuardados();
+}
+
 async function logout() {
   await api('logout', 'POST');
   location.reload();
@@ -810,12 +864,19 @@ function iniciarAdminPanel(client) {
             // Logs
             if (endpoint === 'logs') {
                 try {
-                    const logPath = path.join(process.env.APPDATA || 'C:\\Users\\Administrator', '.pm2', 'logs', 'tsde-bot-out.log');
-                    const content = fs.readFileSync(logPath, 'utf8');
-                    const lines = content.split('\n').slice(-100).join('\n');
-                    return responderJSON(res, 200, { logs: lines });
+                    const logPath = 'C:\\Users\\Administrator\\.pm2\\logs\\tsde-bot-out.log';
+                    const errPath = 'C:\\Users\\Administrator\\.pm2\\logs\\tsde-bot-error.log';
+                    let content = '';
+                    if (fs.existsSync(logPath)) {
+                        content += fs.readFileSync(logPath, 'utf8').split('\n').slice(-80).join('\n');
+                    }
+                    if (fs.existsSync(errPath)) {
+                        const errContent = fs.readFileSync(errPath, 'utf8').split('\n').slice(-20).join('\n');
+                        if (errContent.trim()) content += '\n\n--- ERRORES ---\n' + errContent;
+                    }
+                    return responderJSON(res, 200, { logs: content || 'Sin logs' });
                 } catch (e) {
-                    return responderJSON(res, 200, { logs: 'No se pudieron leer los logs: ' + e.message });
+                    return responderJSON(res, 200, { logs: 'Error leyendo logs: ' + e.message });
                 }
             }
 
@@ -824,6 +885,34 @@ function iniciarAdminPanel(client) {
                 const { hacerBackup } = require('./modules/backupEngine.js');
                 const archivo = hacerBackup();
                 return responderJSON(res, 200, { ok: !!archivo, archivo });
+            }
+
+            // Broadcasts guardados
+            if (endpoint === 'broadcasts-guardados' && req.method === 'GET') {
+                try {
+                    const data = JSON.parse(fs.readFileSync('./broadcasts_guardados.json', 'utf8'));
+                    return responderJSON(res, 200, data);
+                } catch (e) {
+                    return responderJSON(res, 200, []);
+                }
+            }
+
+            if (endpoint === 'broadcasts-guardados' && req.method === 'POST') {
+                const body = await leerBody(req);
+                let data = [];
+                try { data = JSON.parse(fs.readFileSync('./broadcasts_guardados.json', 'utf8')); } catch (e) {}
+                data.push({ id: Date.now().toString(), nombre: body.nombre, texto: body.texto });
+                fs.writeFileSync('./broadcasts_guardados.json', JSON.stringify(data, null, 2));
+                return responderJSON(res, 200, { ok: true });
+            }
+
+            if (endpoint.startsWith('broadcasts-guardados/') && req.method === 'DELETE') {
+                const id = endpoint.slice(21);
+                let data = [];
+                try { data = JSON.parse(fs.readFileSync('./broadcasts_guardados.json', 'utf8')); } catch (e) {}
+                data = data.filter(b => b.id !== id);
+                fs.writeFileSync('./broadcasts_guardados.json', JSON.stringify(data, null, 2));
+                return responderJSON(res, 200, { ok: true });
             }
 
             // Reiniciar
