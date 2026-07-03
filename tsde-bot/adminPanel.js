@@ -5,7 +5,7 @@ const database = require('./db.js');
 const config = require('./config.json');
 
 const ADMIN_PORT = 4000;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'tsde_admin_2026';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || config.adminPassword || 'tsde_admin_2026';
 const SESSIONS = new Set();
 
 function generarToken() {
@@ -822,6 +822,20 @@ function iniciarAdminPanel(client) {
         // Panel HTML
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(HTML_PANEL);
+    });
+
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.warn(`[ADM] Puerto ${ADMIN_PORT} en uso, reintentando en 3s...`);
+            setTimeout(() => {
+                server.close();
+                server.listen(ADMIN_PORT, () => {
+                    console.log(`[ADM] Panel de admin activo en puerto ${ADMIN_PORT}`);
+                });
+            }, 3000);
+        } else {
+            console.error('[ADM] Error servidor admin:', err.message);
+        }
     });
 
     server.listen(ADMIN_PORT, () => {
