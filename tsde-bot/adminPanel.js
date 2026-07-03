@@ -601,6 +601,22 @@ async function login() {
 </html>`;
 
 function iniciarAdminPanel(client) {
+    // En Windows, PM2 no libera el puerto al reiniciar — lo matamos a la fuerza
+    const { execSync } = require('child_process');
+    try {
+        const result = execSync(`netstat -ano | findstr :${ADMIN_PORT}`).toString();
+        const match = result.match(/LISTENING\s+(\d+)/);
+        if (match) {
+            const pid = match[1];
+            if (parseInt(pid) !== process.pid) {
+                execSync(`taskkill /F /PID ${pid}`);
+                console.log(`[ADM] Puerto ${ADMIN_PORT} liberado (PID ${pid})`);
+            }
+        }
+    } catch (e) {
+        // Puerto ya libre
+    }
+
     const server = http.createServer(async (req, res) => {
         const url = req.url;
 
