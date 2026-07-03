@@ -126,16 +126,34 @@ async function asegurarMensajeTickets(client) {
     }
     try {
         const canal = await client.channels.fetch(config.canales.tickets);
-        const mensajes = await canal.messages.fetch({ limit: 10 });
-        const existente = mensajes.find(m => m.author.id === client.user.id);
+
+        // Intentar por ID guardado
+        const msgIdGuardado = database.getMercadoAnuncio('tickets_msg_id');
+        if (msgIdGuardado) {
+            try {
+                const msg = await canal.messages.fetch(msgIdGuardado.id);
+                await msg.edit({ embeds: [construirEmbedTickets()], components: construirBotonesTickets() });
+                console.log('[TKT] Mensaje de tickets actualizado');
+                return;
+            } catch (e) {
+                database.removeMercadoAnuncio('tickets_msg_id');
+            }
+        }
+
+        // Fallback: buscar en los últimos 50 mensajes
+        const mensajes = await canal.messages.fetch({ limit: 50 });
+        const existente = mensajes.find(m => m.author.id === client.user.id && m.embeds.length > 0);
 
         if (existente) {
             await existente.edit({ embeds: [construirEmbedTickets()], components: construirBotonesTickets() });
+            database.setMercadoAnuncio('tickets_msg_id', { id: existente.id });
+            console.log('[TKT] Mensaje de tickets encontrado y actualizado');
         } else {
             const msg = await canal.send({ embeds: [construirEmbedTickets()], components: construirBotonesTickets() });
             await msg.pin().catch(() => {});
+            database.setMercadoAnuncio('tickets_msg_id', { id: msg.id });
+            console.log('[TKT] Mensaje de tickets creado');
         }
-        console.log('[TKT] Mensaje de tickets asegurado');
     } catch (e) {
         console.error('[TKT] Error asegurando mensaje tickets:', e.message);
     }
