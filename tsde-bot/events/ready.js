@@ -5,6 +5,7 @@ const { asegurarMensajeBienvenida } = require('../modules/reglasEngine.js');
 const { iniciarComprobacionExpiraciones } = require('../modules/banderaBlancaEngine.js');
 const { asegurarMensajeTickets } = require('../modules/ticketEngine.js');
 const { iniciarBackupAutomatico } = require('../modules/backupEngine.js');
+const { iniciarAdminPanel } = require('../adminPanel.js');
 
 module.exports = {
     name: 'clientReady',
@@ -21,5 +22,6 @@ module.exports = {
         await asegurarMensajeBienvenida(client);
         await asegurarMensajeTickets(client);
         iniciarComprobacionExpiraciones(client);
+        iniciarAdminPanel(client);
     }
 };
