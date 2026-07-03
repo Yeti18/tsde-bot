@@ -149,19 +149,38 @@ async function asegurarMensajeBienvenida(client) {
 
     try {
         const canal = await client.channels.fetch(config.canales.bienvenida);
-        const mensajes = await canal.messages.fetch({ limit: 10 });
-        const existente = mensajes.find(m => m.author.id === client.user.id);
-
         const embed = construirEmbedBienvenida();
         const botones = construirBotonRegistro();
 
+        // Intentar encontrar el mensaje por ID guardado en SQLite
+        const msgIdGuardado = database.getMercadoAnuncio('bienvenida_msg_id');
+        
+        if (msgIdGuardado) {
+            try {
+                const msg = await canal.messages.fetch(msgIdGuardado.id);
+                await msg.edit({ embeds: [embed], components: [botones] });
+                console.log('[REG] Mensaje de bienvenida actualizado en #bienvenida');
+                return;
+            } catch (e) {
+                // Mensaje no encontrado, creamos uno nuevo
+                database.removeMercadoAnuncio('bienvenida_msg_id');
+            }
+        }
+
+        // Buscar en los últimos 50 mensajes como fallback
+        const mensajes = await canal.messages.fetch({ limit: 50 });
+        const existente = mensajes.find(m => m.author.id === client.user.id && m.embeds.length > 0);
+
         if (existente) {
             await existente.edit({ embeds: [embed], components: [botones] });
+            database.setMercadoAnuncio('bienvenida_msg_id', { id: existente.id });
+            console.log('[REG] Mensaje de bienvenida encontrado y actualizado en #bienvenida');
         } else {
             const msg = await canal.send({ embeds: [embed], components: [botones] });
             await msg.pin().catch(() => {});
+            database.setMercadoAnuncio('bienvenida_msg_id', { id: msg.id });
+            console.log('[REG] Mensaje de bienvenida creado en #bienvenida');
         }
-        console.log('[REG] Mensaje de bienvenida con botón asegurado en #bienvenida');
     } catch (e) {
         console.error('[REG] Error asegurando mensaje de bienvenida:', e.message);
     }
