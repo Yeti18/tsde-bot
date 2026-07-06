@@ -295,9 +295,6 @@ function construirBotonesCanal(solicitud) {
             )
         ];
     }
-                .setStyle(ButtonStyle.Secondary)
-        )];
-    }
 
     // denegado o expirado
     return [new ActionRowBuilder().addComponents(
