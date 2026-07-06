@@ -1115,24 +1115,23 @@ function iniciarAdminPanel(client) {
         res.end(HTML_PANEL);
     });
 
+    server.setMaxListeners(20);
+
     server.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
-            console.warn(`[ADM] Puerto ${ADMIN_PORT} en uso, reintentando en 3s...`);
+            console.warn(`[ADM] Puerto ${ADMIN_PORT} en uso, reintentando en 5s...`);
             setTimeout(() => {
-                server.close();
                 server.listen(ADMIN_PORT, () => {
                     console.log(`[ADM] Panel de admin activo en puerto ${ADMIN_PORT}`);
                 });
-            }, 3000);
+            }, 5000);
         } else {
             console.error('[ADM] Error servidor admin:', err.message);
         }
     });
 
-    // Cerrar limpiamente al salir para liberar el puerto
     process.on('SIGINT', () => { server.close(); process.exit(0); });
     process.on('SIGTERM', () => { server.close(); process.exit(0); });
-    process.on('exit', () => { server.close(); });
 
     server.listen(ADMIN_PORT, () => {
         console.log(`[ADM] Panel de admin activo en puerto ${ADMIN_PORT}`);
