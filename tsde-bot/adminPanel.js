@@ -696,6 +696,9 @@ function eliminarTiempo(idx) {
   rankingLocal.splice(idx, 1);
   renderRanking();
 }
+
+// LOGS
+async function cargarLogs() {
   const r = await api('logs');
   const box = document.getElementById('log-content');
   box.textContent = r.logs || 'Sin logs';
