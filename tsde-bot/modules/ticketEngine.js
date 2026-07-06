@@ -362,6 +362,9 @@ async function handleButton(interaction, client) {
         });
         return;
     }
+
+    // Botón eclosionado (admin)
+    if (id.startsWith('tkt_eclosionado_')) {
         const incubadoraId = parseInt(id.replace('tkt_eclosionado_', ''));
         await handleEclosionado(interaction, client, incubadoraId);
         return;
