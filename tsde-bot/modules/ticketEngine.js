@@ -259,7 +259,8 @@ function modalSoporte() {
 function botonesAdminIncubadora(incubadoraId) {
     return [new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`tkt_eclosionado_${incubadoraId}`).setLabel('✅ Huevos eclosionados').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`tkt_cerrar`).setLabel('🔒 Cerrar ticket').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId(`tkt_reasignar_${incubadoraId}`).setLabel('🔄 Reasignar incubadora').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`tkt_liberar_${incubadoraId}`).setLabel('🔓 Liberar sin eclosionar').setStyle(ButtonStyle.Danger)
     )];
 }
 
@@ -281,8 +282,86 @@ async function handleButton(interaction, client) {
     if (id === 'tkt_reporte') { await interaction.showModal(modalReporte()); return; }
     if (id === 'tkt_soporte') { await interaction.showModal(modalSoporte()); return; }
 
-    // Botón eclosionado (admin)
-    if (id.startsWith('tkt_eclosionado_')) {
+    // Jugador avisa que metió los huevos
+    if (id.startsWith('tkt_huevos_listos_')) {
+        const incubadoraId = id.replace('tkt_huevos_listos_', '');
+        await interaction.update({
+            embeds: [new EmbedBuilder()
+                .setColor(0xF39C12)
+                .setDescription(`✅ ${interaction.user.username} ha confirmado que los huevos están dentro de la Incubadora ${incubadoraId}.\n\nEsperando eclosión manual del admin.`)
+            ],
+            components: []
+        });
+        // Avisar a admins en el canal
+        await interaction.channel.send({
+            content: `@here 🥚 **${interaction.user.username}** ha metido los huevos en la **Incubadora ${incubadoraId}** y solicita eclosión manual.`
+        });
+        return;
+    }
+
+    // Reasignar incubadora
+    if (id.startsWith('tkt_reasignar_')) {
+        const incubadoraIdActual = parseInt(id.replace('tkt_reasignar_', ''));
+        const esAdmin = interaction.member.permissions.has('ManageMessages');
+        if (!esAdmin) {
+            await interaction.reply({ content: '⛔ Solo los admins.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Liberar la actual y asignar la siguiente libre
+        const incActual = database.getIncubadoras().find(i => i.id === incubadoraIdActual);
+        const ocupadaPor = incActual?.ocupada_por;
+        database.updateIncubadora(incubadoraIdActual, 'libre', null, null);
+
+        const nuevaInc = database.getIncubadoraLibre();
+        if (!nuevaInc) {
+            await interaction.reply({ content: '⚠️ No hay otra incubadora libre disponible ahora mismo.', flags: MessageFlags.Ephemeral });
+            // Volver a ocupar la anterior
+            database.updateIncubadora(incubadoraIdActual, 'ocupada', null, ocupadaPor);
+            return;
+        }
+
+        database.updateIncubadora(nuevaInc.id, 'ocupada', null, ocupadaPor);
+
+        await interaction.update({
+            embeds: [new EmbedBuilder()
+                .setTitle('🔄 Incubadora reasignada')
+                .setColor(0x3498DB)
+                .setDescription(
+                    `Incubadora ${incubadoraIdActual} liberada.\n\n` +
+                    `**Nueva incubadora asignada: ${nuevaInc.id}**\n` +
+                    `🔑 Nuevo PIN: \`${nuevaInc.pin}\`\n\n` +
+                    `Comunica el nuevo PIN al jugador.`
+                )
+            ],
+            components: botonesAdminIncubadora(nuevaInc.id)
+        });
+        return;
+    }
+
+    // Liberar incubadora sin eclosionar (algo salió mal)
+    if (id.startsWith('tkt_liberar_')) {
+        const incubadoraId = parseInt(id.replace('tkt_liberar_', ''));
+        const esAdmin = interaction.member.permissions.has('ManageMessages');
+        if (!esAdmin) {
+            await interaction.reply({ content: '⛔ Solo los admins.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        database.updateIncubadora(incubadoraId, 'libre', null, null);
+
+        await interaction.update({
+            embeds: [new EmbedBuilder()
+                .setTitle('🔓 Incubadora liberada')
+                .setColor(0xE74C3C)
+                .setDescription(`Incubadora ${incubadoraId} marcada como libre sin eclosionar.`)
+            ],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('tkt_cerrar').setLabel('🔒 Cerrar ticket').setStyle(ButtonStyle.Secondary)
+            )]
+        });
+        return;
+    }
         const incubadoraId = parseInt(id.replace('tkt_eclosionado_', ''));
         await handleEclosionado(interaction, client, incubadoraId);
         return;
@@ -386,11 +465,11 @@ async function handlePinActualizado(interaction, client, incubadoraId) {
 
     await interaction.update({
         embeds: [new EmbedBuilder()
-            .setTitle('✅ Incubadora liberada')
+            .setTitle('✅ Incubadora liberada y lista')
             .setColor(0x2ECC71)
             .setDescription(
                 `Incubadora ${incubadoraId} actualizada con PIN \`${nuevoPIN}\` y marcada como **libre**.\n\n` +
-                `Lista para el siguiente jugador.`
+                `Lista para el siguiente jugador. Ya puedes cerrar el ticket.`
             )
         ],
         components: [new ActionRowBuilder().addComponents(
@@ -418,6 +497,15 @@ async function procesarIncubadora(interaction, client) {
     const tipoHuevo = interaction.fields.getTextInputValue('tipo_huevo');
     const cantidad = interaction.fields.getTextInputValue('cantidad');
     const nombreArk = interaction.fields.getTextInputValue('nombre_ark');
+
+    // Comprobar si el jugador ya tiene una incubadora asignada
+    const todasIncubadoras = database.getIncubadoras();
+    const yaAsignada = todasIncubadoras.find(i => i.estado === 'ocupada' && i.ocupada_por === interaction.user.id);
+    if (yaAsignada) {
+        return interaction.editReply({
+            content: `⚠️ Ya tienes la **Incubadora ${yaAsignada.id}** asignada. Espera a que un admin eclosione tus huevos antes de solicitar otra.`
+        });
+    }
 
     // Buscar incubadora libre desde SQLite
     const incubadora = database.getIncubadoraLibre();
@@ -451,6 +539,24 @@ async function procesarIncubadora(interaction, client) {
         content: `${interaction.user} — aquí está tu ticket de incubadora.`,
         embeds: [embed],
         components: botonesAdminIncubadora(incubadora.id)
+    });
+
+    // Mensaje al jugador con botón de solicitar eclosión
+    await canal.send({
+        content: `${interaction.user}`,
+        embeds: [new EmbedBuilder()
+            .setColor(0x2ECC71)
+            .setDescription(
+                `🔑 Tu PIN es \`${incubadora.pin}\` para la **Incubadora ${incubadora.id}**\n\n` +
+                `Cuando hayas metido los huevos pulsa el botón para avisar al admin.`
+            )
+        ],
+        components: [new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`tkt_huevos_listos_${incubadora.id}`)
+                .setLabel('🥚 Huevos metidos, solicitar eclosión')
+                .setStyle(ButtonStyle.Success)
+        )]
     });
 
     if (!enHorario) {
