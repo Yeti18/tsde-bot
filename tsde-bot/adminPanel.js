@@ -107,6 +107,7 @@ const HTML_PANEL = `<!DOCTYPE html>
   <a href="#" onclick="showPage('banderas', this)">Banderas Blancas</a>
   <a href="#" onclick="showPage('tickets', this)">Tickets</a>
   <a href="#" onclick="showPage('incubadoras', this)">Incubadoras</a>
+  <a href="#" onclick="showPage('laberinto', this)">🌀 Laberinto</a>
   <a href="#" onclick="showPage('mercado', this)">Mercado</a>
   <a href="#" onclick="showPage('rcon', this)">RCON</a>
   <a href="#" onclick="showPage('logs', this)">Logs</a>
@@ -182,9 +183,18 @@ const HTML_PANEL = `<!DOCTYPE html>
 
 <!-- TICKETS -->
 <div id="page-tickets" class="page">
+  <div class="grid">
+    <div class="card"><h3>🎫 Abiertos</h3><div class="value" id="tkt-abiertos">-</div></div>
+    <div class="card"><h3>✅ Cerrados</h3><div class="value" id="tkt-cerrados">-</div></div>
+    <div class="card"><h3>⚠️ Reportes pendientes</h3><div class="value" id="tkt-reportes">-</div></div>
+  </div>
   <div class="section">
-    <h2>🎫 Tickets recientes</h2>
-    <div id="lista-tickets"></div>
+    <h2>🎫 Tickets activos</h2>
+    <div id="lista-tickets"><em style="color:#666">Cargando...</em></div>
+  </div>
+  <div class="section">
+    <h2>⚠️ Reportes pendientes</h2>
+    <div id="lista-reportes-tickets"><em style="color:#666">Cargando...</em></div>
   </div>
 </div>
 
@@ -193,6 +203,33 @@ const HTML_PANEL = `<!DOCTYPE html>
   <div class="section">
     <h2>🥚 Estado de incubadoras</h2>
     <div id="lista-incubadoras"></div>
+  </div>
+</div>
+
+<!-- LABERINTO -->
+<div id="page-laberinto" class="page">
+  <div class="section">
+    <h2>🌀 Cronómetro del Laberinto</h2>
+    <div style="text-align:center;padding:20px">
+      <div id="cronometro-display" style="font-size:72px;font-family:monospace;color:#4CAF50;text-shadow:0 0 20px #4CAF50">00:00:00</div>
+      <div id="jugador-actual" style="color:#888;font-size:16px;margin:8px 0">Sin jugador activo</div>
+      <div class="actions" style="justify-content:center;margin-top:16px;gap:12px">
+        <button class="btn btn-green" style="font-size:16px;padding:10px 24px" onclick="iniciarCrono()">▶ Iniciar</button>
+        <button class="btn btn-red" style="font-size:16px;padding:10px 24px" onclick="pararCrono()">⏹ Parar y registrar</button>
+        <button class="btn btn-gray" style="font-size:16px;padding:10px 24px" onclick="resetCrono()">↺ Reset</button>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px;justify-content:center">
+        <input id="nombre-corredor" placeholder="Nombre del jugador que corre..." style="width:280px">
+        <button class="btn btn-gray" onclick="setJugadorActual()">Asignar</button>
+      </div>
+    </div>
+  </div>
+  <div class="section">
+    <h2>🏆 Ranking de la sesión</h2>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-red" onclick="limpiarRanking()">🗑️ Limpiar ranking</button>
+    </div>
+    <div id="ranking-laberinto"><em style="color:#666">Sin tiempos registrados</em></div>
   </div>
 </div>
 
@@ -288,6 +325,8 @@ async function loadPage(name) {
   if (name === 'banderas') await cargarBanderas();
   if (name === 'incubadoras') await cargarIncubadoras();
   if (name === 'mercado') await cargarMercado();
+  if (name === 'tickets') await cargarTickets();
+  if (name === 'laberinto') renderRanking();
   if (name === 'rcon') await cargarBroadcastsGuardados();
   if (name === 'logs') await cargarLogs();
 }
@@ -426,10 +465,10 @@ async function cargarBanderas() {
       <span style="color:#888;font-size:12px;margin-left:8px">\${b.discord_username}</span>
       \${b.nombre_tribu ? '<span style="color:#666;font-size:12px"> · Tribu: '+b.nombre_tribu+'</span>' : ''}
       <div class="actions" style="margin-top:8px">
-        <button class="btn btn-green" style="font-size:11px" onclick="accionBB('\${b.id}','activar')">✅ Activar</button>
-        <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\${b.id}','denegar_cueva')">❌ No cumple</button>
-        <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\${b.id}','denegar_repetida')">❌ Ya usó BB</button>
-      </div>
+          <button class="btn btn-green" style="font-size:11px" onclick="accionBB('\${b.id}','activar')">✅ Activar</button>
+          <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\${b.id}','denegar_cueva')">❌ No cumple</button>
+          <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\${b.id}','denegar_repetida')">❌ Ya usó BB</button>
+        </div>
     </div>
   \`), ...activas.map(b => {
     const expira = new Date(b.fecha_expiracion);
@@ -443,6 +482,7 @@ async function cargarBanderas() {
         \${b.nombre_tribu ? '<span style="color:#666;font-size:12px"> · '+b.nombre_tribu+'</span>' : ''}
         <span class="countdown" style="margin-left:8px">⏱️ \${horas}h \${mins}m restantes</span>
         <div class="actions" style="margin-top:8px">
+          <button class="btn btn-green" style="font-size:11px" onclick="accionBB('\${b.id}','prorrogar')">⏰ Prorrogar +24h</button>
           <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\${b.id}','quitar')">🗑️ Quitar protección</button>
         </div>
       </div>
@@ -537,8 +577,125 @@ async function enviarBroadcast() {
   document.getElementById('broadcast-msg').value = '';
 }
 
-// LOGS
-async function cargarLogs() {
+// TICKETS
+async function cargarTickets() {
+  const data = await api('tickets');
+  document.getElementById('tkt-abiertos').textContent = data.abiertos?.length || 0;
+  document.getElementById('tkt-cerrados').textContent = data.cerrados || 0;
+  document.getElementById('tkt-reportes').textContent = data.reportes?.length || 0;
+
+  const lista = document.getElementById('lista-tickets');
+  if (!data.abiertos?.length) {
+    lista.innerHTML = '<em style="color:#666">No hay tickets activos</em>';
+  } else {
+    lista.innerHTML = '<table><thead><tr><th>Tipo</th><th>Jugador</th><th>Fecha</th><th>Canal</th></tr></thead><tbody>' +
+      data.abiertos.map(t => \`<tr>
+        <td><span class="badge blue">\${t.tipo}</span></td>
+        <td>\${t.discord_username}</td>
+        <td style="color:#666">\${new Date(t.fecha).toLocaleString('es-ES')}</td>
+        <td style="color:#888;font-size:12px">\${t.canal_id ? '#'+t.canal_id : '-'}</td>
+      </tr>\`).join('') + '</tbody></table>';
+  }
+
+  const reportes = document.getElementById('lista-reportes-tickets');
+  if (!data.reportes?.length) {
+    reportes.innerHTML = '<em style="color:#666">No hay reportes pendientes</em>';
+  } else {
+    reportes.innerHTML = '<table><thead><tr><th>Reportado</th><th>Por</th><th>Motivo</th><th>Fecha</th></tr></thead><tbody>' +
+      data.reportes.map(r => \`<tr>
+        <td><strong>\${r.jugador_reportado}</strong></td>
+        <td style="color:#888">\${r.reportado_por}</td>
+        <td>\${r.motivo}</td>
+        <td style="color:#666">\${new Date(r.fecha).toLocaleDateString('es-ES')}</td>
+      </tr>\`).join('') + '</tbody></table>';
+  }
+}
+
+// CRONÓMETRO LABERINTO
+let cronoInterval = null;
+let cronoStart = null;
+let cronoPausado = 0;
+let rankingLocal = [];
+let jugadorActualCrono = '';
+
+function formatTiempo(ms) {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  const cs = Math.floor((ms % 1000) / 10);
+  return (h > 0 ? h.toString().padStart(2,'0') + ':' : '') +
+    m.toString().padStart(2,'0') + ':' +
+    s.toString().padStart(2,'0') + '.' +
+    cs.toString().padStart(2,'0');
+}
+
+function setJugadorActual() {
+  jugadorActualCrono = document.getElementById('nombre-corredor').value.trim();
+  document.getElementById('jugador-actual').textContent = jugadorActualCrono ? '🦖 ' + jugadorActualCrono : 'Sin jugador activo';
+  document.getElementById('nombre-corredor').value = '';
+}
+
+function iniciarCrono() {
+  if (cronoInterval) return;
+  if (!jugadorActualCrono) {
+    toast('Asigna un jugador primero', '#f44');
+    return;
+  }
+  cronoStart = Date.now() - cronoPausado;
+  cronoInterval = setInterval(() => {
+    const elapsed = Date.now() - cronoStart;
+    document.getElementById('cronometro-display').textContent = formatTiempo(elapsed);
+  }, 10);
+}
+
+function pararCrono() {
+  if (!cronoInterval) return;
+  clearInterval(cronoInterval);
+  cronoInterval = null;
+  const tiempo = Date.now() - cronoStart;
+  cronoPausado = tiempo;
+
+  // Registrar en el ranking
+  rankingLocal.push({ jugador: jugadorActualCrono, tiempo, tiempoStr: formatTiempo(tiempo) });
+  rankingLocal.sort((a, b) => a.tiempo - b.tiempo);
+  renderRanking();
+  toast('✅ Tiempo registrado: ' + formatTiempo(tiempo), '#4CAF50');
+}
+
+function resetCrono() {
+  clearInterval(cronoInterval);
+  cronoInterval = null;
+  cronoStart = null;
+  cronoPausado = 0;
+  document.getElementById('cronometro-display').textContent = '00:00.00';
+  jugadorActualCrono = '';
+  document.getElementById('jugador-actual').textContent = 'Sin jugador activo';
+}
+
+function limpiarRanking() {
+  if (!confirm('¿Limpiar el ranking de esta sesión?')) return;
+  rankingLocal = [];
+  renderRanking();
+}
+
+function renderRanking() {
+  const div = document.getElementById('ranking-laberinto');
+  if (!rankingLocal.length) { div.innerHTML = '<em style="color:#666">Sin tiempos registrados</em>'; return; }
+  const medallas = ['🥇', '🥈', '🥉'];
+  div.innerHTML = rankingLocal.map((r, i) => \`
+    <div style="display:flex;align-items:center;gap:12px;padding:10px;background:\${i===0?'#1a3a1a':i===1?'#2a2a1a':i===2?'#1a1a2a':'#111'};border-radius:6px;margin-bottom:6px;border:1px solid \${i===0?'#4CAF50':i===1?'#F1C40F':i===2?'#5bf':'#333'}">
+      <div style="font-size:24px">\${medallas[i] || (i+1) + '.'}</div>
+      <div style="flex:1"><strong>\${r.jugador}</strong></div>
+      <div style="font-family:monospace;font-size:20px;color:\${i===0?'#4CAF50':'#fff'}">\${r.tiempoStr}</div>
+      <button class="btn btn-red" style="font-size:11px" onclick="eliminarTiempo(\${i})">🗑️</button>
+    </div>
+  \`).join('');
+}
+
+function eliminarTiempo(idx) {
+  rankingLocal.splice(idx, 1);
+  renderRanking();
+}
   const r = await api('logs');
   const box = document.getElementById('log-content');
   box.textContent = r.logs || 'Sin logs';
@@ -802,6 +959,29 @@ function iniciarAdminPanel(client) {
                 return responderJSON(res, 200, { ok: true });
             }
 
+            // Tickets
+            if (endpoint === 'tickets') {
+                const abiertos = (() => {
+                    try {
+                        return database.getAllJugadores().slice(0, 0); // placeholder
+                    } catch (e) { return []; }
+                })();
+
+                // Leer tickets abiertos de SQLite
+                const Database = require('better-sqlite3');
+                const rawDb = new Database('./tsde.db');
+                const ticketsAbiertos = rawDb.prepare("SELECT * FROM tickets WHERE estado = 'abierto' ORDER BY fecha DESC LIMIT 50").all();
+                const ticketsCerrados = rawDb.prepare("SELECT COUNT(*) as total FROM tickets WHERE estado = 'cerrado'").get().total;
+                const reportesPend = rawDb.prepare("SELECT * FROM reportes WHERE estado = 'pendiente' ORDER BY fecha DESC").all();
+                rawDb.close();
+
+                return responderJSON(res, 200, {
+                    abiertos: ticketsAbiertos,
+                    cerrados: ticketsCerrados,
+                    reportes: reportesPend
+                });
+            }
+
             // Banderas Blancas
             if (endpoint === 'banderas') {
                 return responderJSON(res, 200, database.getAllBanderas());
@@ -814,6 +994,12 @@ function iniciarAdminPanel(client) {
                 if (accion === 'activar') {
                     const expira = new Date(Date.now() + 72 * 3600000).toISOString();
                     database.updateBanderaEstado(id, 'activo', { fechaActivacion: new Date().toISOString(), fechaExpiracion: expira });
+                } else if (accion === 'prorrogar') {
+                    const bandera = database.getBandera(id);
+                    if (bandera) {
+                        const nuevaExp = new Date(new Date(bandera.fecha_expiracion).getTime() + 24 * 3600000).toISOString();
+                        database.updateBanderaEstado(id, 'activo', { fechaExpiracion: nuevaExp, aviso24hEnviado: false });
+                    }
                 } else if (accion === 'denegar_cueva' || accion === 'denegar_repetida') {
                     database.updateBanderaEstado(id, 'denegado', { motivoDenegacion: accion === 'denegar_cueva' ? 'no_cumple' : 'repetida' });
                 } else if (accion === 'quitar') {
