@@ -208,29 +208,81 @@ const HTML_PANEL = `<!DOCTYPE html>
 
 <!-- LABERINTO -->
 <div id="page-laberinto" class="page">
+
+  <!-- CONFIGURACIÓN DEL EVENTO -->
   <div class="section">
-    <h2>🌀 Cronómetro del Laberinto</h2>
-    <div style="text-align:center;padding:20px">
-      <div id="cronometro-display" style="font-size:72px;font-family:monospace;color:#4CAF50;text-shadow:0 0 20px #4CAF50">00:00:00</div>
-      <div id="jugador-actual" style="color:#888;font-size:16px;margin:8px 0">Sin jugador activo</div>
-      <div class="actions" style="justify-content:center;margin-top:16px;gap:12px">
-        <button class="btn btn-green" style="font-size:16px;padding:10px 24px" onclick="iniciarCrono()">▶ Iniciar</button>
-        <button class="btn btn-red" style="font-size:16px;padding:10px 24px" onclick="pararCrono()">⏹ Parar y registrar</button>
-        <button class="btn btn-gray" style="font-size:16px;padding:10px 24px" onclick="resetCrono()">↺ Reset</button>
+    <h2>🌀 Configurar evento</h2>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div class="form-group" style="flex:1;min-width:200px;margin:0">
+        <label>Modo de juego</label>
+        <select id="lab-modo" onchange="cambiarModo()">
+          <option value="speed">⚡ Speed — Contrarreloj individual</option>
+          <option value="tribu">🛡️ Tribu — Tiempo medio del equipo</option>
+          <option value="survival">💀 Survival — Último en pie</option>
+        </select>
       </div>
-      <div style="margin-top:16px;display:flex;gap:8px;justify-content:center">
-        <input id="nombre-corredor" placeholder="Nombre del jugador que corre..." style="width:280px">
-        <button class="btn btn-gray" onclick="setJugadorActual()">Asignar</button>
+      <div class="form-group" style="flex:1;min-width:200px;margin:0">
+        <label>Premio 1er puesto (GC)</label>
+        <input id="lab-premio1" type="number" value="1000">
+      </div>
+      <div class="form-group" style="flex:1;min-width:200px;margin:0">
+        <label>Premio 2do puesto (GC)</label>
+        <input id="lab-premio2" type="number" value="600">
+      </div>
+      <div class="form-group" style="flex:1;min-width:200px;margin:0">
+        <label>Premio 3er puesto (GC)</label>
+        <input id="lab-premio3" type="number" value="400">
+      </div>
+      <div class="form-group" style="flex:1;min-width:200px;margin:0">
+        <label>Premio participación (GC)</label>
+        <input id="lab-premiopart" type="number" value="200">
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <button class="btn btn-green" onclick="anunciarEvento()">📢 Anunciar evento por broadcast</button>
+      <button class="btn btn-red" style="margin-left:8px" onclick="finalizarEvento()">🏆 Finalizar y anunciar ganadores</button>
+    </div>
+  </div>
+
+  <!-- CRONÓMETRO -->
+  <div class="section">
+    <h2>⏱️ Cronómetro</h2>
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <div style="text-align:center;flex:1;min-width:300px">
+        <div id="cronometro-display" style="font-size:80px;font-family:monospace;color:#4CAF50;text-shadow:0 0 20px #4CAF50;line-height:1">00:00.00</div>
+        <div id="jugador-actual" style="color:#F39C12;font-size:18px;margin:8px 0;font-weight:bold">Sin jugador activo</div>
+        <div id="lab-estado" style="color:#666;font-size:13px">Listo para empezar</div>
+      </div>
+      <div style="flex:1;min-width:250px">
+        <div class="form-group">
+          <label>Jugador que corre ahora</label>
+          <div style="display:flex;gap:8px">
+            <input id="nombre-corredor" placeholder="Nombre en ARK..." onkeydown="if(event.key==='Enter')setJugadorActual()">
+            <button class="btn btn-gray" onclick="setJugadorActual()">✓</button>
+          </div>
+        </div>
+        <div id="lab-modo-survival" style="display:none">
+          <div class="form-group">
+            <label>Jugadores en Survival (uno por línea)</label>
+            <textarea id="survival-jugadores" style="height:80px;resize:vertical" placeholder="Jugador1&#10;Jugador2&#10;Jugador3"></textarea>
+          </div>
+          <button class="btn btn-yellow" onclick="eliminarUltimo()">💀 Eliminar último jugador</button>
+        </div>
+        <div class="actions" style="margin-top:12px">
+          <button class="btn btn-green" style="font-size:15px;padding:10px 20px" onclick="iniciarCrono()">▶ Iniciar</button>
+          <button class="btn btn-red" style="font-size:15px;padding:10px 20px" onclick="pararCrono()">⏹ Parar</button>
+          <button class="btn btn-gray" onclick="resetCrono()">↺ Reset</button>
+        </div>
       </div>
     </div>
   </div>
+
+  <!-- RANKING -->
   <div class="section">
-    <h2>🏆 Ranking de la sesión</h2>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button class="btn btn-red" onclick="limpiarRanking()">🗑️ Limpiar ranking</button>
-    </div>
+    <h2>🏆 Ranking de la sesión <button class="btn btn-gray" style="float:right;font-size:11px" onclick="limpiarRanking()">🗑️ Limpiar</button></h2>
     <div id="ranking-laberinto"><em style="color:#666">Sin tiempos registrados</em></div>
   </div>
+
 </div>
 
 <!-- MERCADO -->
@@ -617,59 +669,78 @@ let cronoStart = null;
 let cronoPausado = 0;
 let rankingLocal = [];
 let jugadorActualCrono = '';
+let modoActual = 'speed';
+let survivalJugadores = [];
+let cronoActivo = false;
+
+function cambiarModo() {
+  modoActual = document.getElementById('lab-modo').value;
+  document.getElementById('lab-modo-survival').style.display = modoActual === 'survival' ? 'block' : 'none';
+}
 
 function formatTiempo(ms) {
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
+  const m = Math.floor(ms / 60000);
   const s = Math.floor((ms % 60000) / 1000);
   const cs = Math.floor((ms % 1000) / 10);
-  return (h > 0 ? h.toString().padStart(2,'0') + ':' : '') +
-    m.toString().padStart(2,'0') + ':' +
-    s.toString().padStart(2,'0') + '.' +
-    cs.toString().padStart(2,'0');
+  return m.toString().padStart(2,'0') + ':' + s.toString().padStart(2,'0') + '.' + cs.toString().padStart(2,'0');
 }
 
 function setJugadorActual() {
   jugadorActualCrono = document.getElementById('nombre-corredor').value.trim();
-  document.getElementById('jugador-actual').textContent = jugadorActualCrono ? '🦖 ' + jugadorActualCrono : 'Sin jugador activo';
+  if (!jugadorActualCrono) return;
+  document.getElementById('jugador-actual').textContent = '🦖 ' + jugadorActualCrono;
   document.getElementById('nombre-corredor').value = '';
+  document.getElementById('lab-estado').textContent = 'Jugador asignado — pulsa Iniciar para empezar';
 }
 
 function iniciarCrono() {
-  if (cronoInterval) return;
-  if (!jugadorActualCrono) {
-    toast('Asigna un jugador primero', '#f44');
-    return;
-  }
+  if (cronoActivo) return toast('El cronómetro ya está corriendo', '#f44');
+  if (!jugadorActualCrono && modoActual !== 'survival') return toast('Asigna un jugador primero', '#f44');
   cronoStart = Date.now() - cronoPausado;
+  cronoActivo = true;
+  document.getElementById('lab-estado').textContent = '⏱️ Cronómetro activo...';
   cronoInterval = setInterval(() => {
     const elapsed = Date.now() - cronoStart;
     document.getElementById('cronometro-display').textContent = formatTiempo(elapsed);
   }, 10);
 }
 
-function pararCrono() {
-  if (!cronoInterval) return;
+async function pararCrono() {
+  if (!cronoActivo) return;
   clearInterval(cronoInterval);
   cronoInterval = null;
+  cronoActivo = false;
   const tiempo = Date.now() - cronoStart;
-  cronoPausado = tiempo;
+  cronoPausado = 0;
+  const tiempoStr = formatTiempo(tiempo);
 
-  // Registrar en el ranking
-  rankingLocal.push({ jugador: jugadorActualCrono, tiempo, tiempoStr: formatTiempo(tiempo) });
-  rankingLocal.sort((a, b) => a.tiempo - b.tiempo);
-  renderRanking();
-  toast('✅ Tiempo registrado: ' + formatTiempo(tiempo), '#4CAF50');
+  if (modoActual === 'speed' || modoActual === 'tribu') {
+    rankingLocal.push({ jugador: jugadorActualCrono, tiempo, tiempoStr });
+    rankingLocal.sort((a, b) => a.tiempo - b.tiempo);
+    renderRanking();
+
+    // Broadcast automático con el tiempo
+    const broadcast = \`Broadcast <RichColor Color="1,0.8,0,1">\${jugadorActualCrono}</> <RichColor Color="1,1,1,1">ha completado el Laberinto en</> <RichColor Color="0,1,0,1">\${tiempoStr}</>\`;
+    await api('rcon', 'POST', { comando: broadcast });
+    toast(\`✅ \${jugadorActualCrono}: \${tiempoStr} — broadcast enviado\`, '#4CAF50');
+
+    // Resetear para el siguiente jugador
+    document.getElementById('cronometro-display').textContent = '00:00.00';
+    document.getElementById('jugador-actual').textContent = 'Sin jugador activo';
+    document.getElementById('lab-estado').textContent = 'Asigna el siguiente jugador';
+    jugadorActualCrono = '';
+  }
 }
 
 function resetCrono() {
   clearInterval(cronoInterval);
   cronoInterval = null;
-  cronoStart = null;
+  cronoActivo = false;
   cronoPausado = 0;
   document.getElementById('cronometro-display').textContent = '00:00.00';
-  jugadorActualCrono = '';
   document.getElementById('jugador-actual').textContent = 'Sin jugador activo';
+  document.getElementById('lab-estado').textContent = 'Listo para empezar';
+  jugadorActualCrono = '';
 }
 
 function limpiarRanking() {
@@ -678,13 +749,58 @@ function limpiarRanking() {
   renderRanking();
 }
 
+function eliminarUltimo() {
+  if (!rankingLocal.length) return;
+  rankingLocal.pop();
+  renderRanking();
+}
+
+function eliminarTiempo(idx) {
+  rankingLocal.splice(idx, 1);
+  renderRanking();
+}
+
 function renderRanking() {
   const div = document.getElementById('ranking-laberinto');
   if (!rankingLocal.length) { div.innerHTML = '<em style="color:#666">Sin tiempos registrados</em>'; return; }
   const medallas = ['🥇', '🥈', '🥉'];
+
+  // Para modo tribu, mostrar tiempo medio por tribu
+  if (modoActual === 'tribu') {
+    const tribus = {};
+    rankingLocal.forEach(r => {
+      const tribu = r.tribu || r.jugador;
+      if (!tribus[tribu]) tribus[tribu] = { tiempos: [], jugadores: [] };
+      tribus[tribu].tiempos.push(r.tiempo);
+      tribus[tribu].jugadores.push(r.jugador);
+    });
+    const ranking = Object.entries(tribus)
+      .map(([nombre, data]) => ({
+        nombre,
+        jugadores: data.jugadores,
+        media: data.tiempos.reduce((a,b)=>a+b,0) / data.tiempos.length,
+        mediaStr: formatTiempo(data.tiempos.reduce((a,b)=>a+b,0) / data.tiempos.length)
+      }))
+      .sort((a,b) => a.media - b.media);
+
+    div.innerHTML = ranking.map((t, i) => \`
+      <div style="background:\${i===0?'#1a3a1a':i===1?'#2a2a1a':i===2?'#1a1a2a':'#111'};border:1px solid \${i===0?'#4CAF50':i===1?'#F1C40F':i===2?'#5bf':'#333'};border-radius:6px;padding:12px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="font-size:24px">\${medallas[i] || (i+1)+'.'}</div>
+          <div style="flex:1">
+            <strong>\${t.nombre}</strong>
+            <div style="font-size:12px;color:#888">\${t.jugadores.join(', ')}</div>
+          </div>
+          <div style="font-family:monospace;font-size:20px;color:\${i===0?'#4CAF50':'#fff'}">⌀ \${t.mediaStr}</div>
+        </div>
+      </div>
+    \`).join('');
+    return;
+  }
+
   div.innerHTML = rankingLocal.map((r, i) => \`
     <div style="display:flex;align-items:center;gap:12px;padding:10px;background:\${i===0?'#1a3a1a':i===1?'#2a2a1a':i===2?'#1a1a2a':'#111'};border-radius:6px;margin-bottom:6px;border:1px solid \${i===0?'#4CAF50':i===1?'#F1C40F':i===2?'#5bf':'#333'}">
-      <div style="font-size:24px">\${medallas[i] || (i+1) + '.'}</div>
+      <div style="font-size:24px">\${medallas[i] || (i+1)+'.'}</div>
       <div style="flex:1"><strong>\${r.jugador}</strong></div>
       <div style="font-family:monospace;font-size:20px;color:\${i===0?'#4CAF50':'#fff'}">\${r.tiempoStr}</div>
       <button class="btn btn-red" style="font-size:11px" onclick="eliminarTiempo(\${i})">🗑️</button>
@@ -692,9 +808,40 @@ function renderRanking() {
   \`).join('');
 }
 
-function eliminarTiempo(idx) {
-  rankingLocal.splice(idx, 1);
-  renderRanking();
+async function anunciarEvento() {
+  const modo = document.getElementById('lab-modo');
+  const modoTexto = modo.options[modo.selectedIndex].text.split('—')[0].trim();
+  const broadcast = \`Broadcast <RichColor Color="1,0.8,0,1">LABERINTO TSDE - \${modoTexto.toUpperCase()}!</> <RichColor Color="1,1,1,1">Ven al area de espera.</> <RichColor Color="0,1,1,1">Premios: 1er \${document.getElementById('lab-premio1').value}GC - 2do \${document.getElementById('lab-premio2').value}GC - 3er \${document.getElementById('lab-premio3').value}GC</> <RichColor Color="0,1,0,1">Solo por participar: \${document.getElementById('lab-premiopart').value}GC!</>\`;
+  const r = await api('rcon', 'POST', { comando: broadcast });
+  toast(r.error ? '❌ Error RCON' : '✅ Anuncio enviado', r.error ? '#f44' : '#4CAF50');
+}
+
+async function finalizarEvento() {
+  if (!rankingLocal.length) return toast('No hay tiempos registrados', '#f44');
+  if (!confirm('¿Finalizar el evento y anunciar ganadores?')) return;
+
+  const p1 = document.getElementById('lab-premio1').value;
+  const p2 = document.getElementById('lab-premio2').value;
+  const p3 = document.getElementById('lab-premio3').value;
+  const pp = document.getElementById('lab-premiopart').value;
+
+  // Broadcast de ganadores
+  let broadcast = \`Broadcast <RichColor Color="1,0.8,0,1">RESULTADOS DEL LABERINTO TSDE!</>\`;
+  if (rankingLocal[0]) broadcast += \` <RichColor Color="1,1,0,1">1er \${rankingLocal[0].jugador} (\${rankingLocal[0].tiempoStr}) \${p1}GC</>\`;
+  if (rankingLocal[1]) broadcast += \` <RichColor Color="0.8,0.8,0.8,1">2do \${rankingLocal[1].jugador} (\${rankingLocal[1].tiempoStr}) \${p2}GC</>\`;
+  if (rankingLocal[2]) broadcast += \` <RichColor Color="0.7,0.5,0.2,1">3er \${rankingLocal[2].jugador} (\${rankingLocal[2].tiempoStr}) \${p3}GC</>\`;
+  broadcast += \` <RichColor Color="0,1,0,1">Todos los participantes: \${pp}GC!</>\`;
+
+  await api('rcon', 'POST', { comando: broadcast });
+
+  // Publicar en Discord
+  await api('laberinto-resultado', 'POST', {
+    modo: modoActual,
+    ranking: rankingLocal,
+    premios: { p1, p2, p3, pp }
+  });
+
+  toast('✅ Ganadores anunciados en juego y Discord', '#4CAF50');
 }
 
 // LOGS
@@ -1102,6 +1249,36 @@ function iniciarAdminPanel(client) {
                 data = data.filter(b => b.id !== id);
                 fs.writeFileSync('./broadcasts_guardados.json', JSON.stringify(data, null, 2));
                 return responderJSON(res, 200, { ok: true });
+            }
+
+            // Laberinto resultado → publicar en Discord
+            if (endpoint === 'laberinto-resultado' && req.method === 'POST') {
+                const body = await leerBody(req);
+                try {
+                    const { EmbedBuilder } = require('discord.js');
+                    const canalEventos = await client.channels.fetch(config.canales.eventos);
+                    const medallas = ['🥇', '🥈', '🥉'];
+                    const modos = { speed: '⚡ Speed', tribu: '🛡️ Tribu', survival: '💀 Survival' };
+
+                    const embed = new EmbedBuilder()
+                        .setTitle(`🌀 Resultados del Laberinto TSDE — ${modos[body.modo] || body.modo}`)
+                        .setColor(0x4CAF50)
+                        .setDescription(
+                            body.ranking.map((r, i) =>
+                                `${medallas[i] || `**${i+1}.**`} **${r.jugador}** — \`${r.tiempoStr}\``
+                            ).join('\n')
+                        )
+                        .addFields({
+                            name: '🏆 Premios',
+                            value: `🥇 ${body.premios.p1} GC · 🥈 ${body.premios.p2} GC · 🥉 ${body.premios.p3} GC\n👥 Participación: ${body.premios.pp} GC`
+                        })
+                        .setTimestamp();
+
+                    await canalEventos.send({ embeds: [embed] });
+                    return responderJSON(res, 200, { ok: true });
+                } catch (e) {
+                    return responderJSON(res, 500, { error: e.message });
+                }
             }
 
             // Reiniciar
