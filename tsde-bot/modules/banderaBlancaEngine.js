@@ -44,8 +44,76 @@ function guardarBandera(data) {
     }
 }
 
-function esAdmin(interaction) {
-    return interaction.member.permissions.has('ManageMessages');
+function construirModalPostraideo() {
+    const modal = new ModalBuilder()
+        .setCustomId('bb_modal_postraideo')
+        .setTitle('⚔️ Solicitud Post-Raideo');
+
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('nombre_ark')
+                .setLabel('Tu nombre en ARK / Gamertag')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('nombre_tribu')
+                .setLabel('Nombre de tu tribu (si tienes)')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(false)
+        ),
+        new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('descripcion_raideo')
+                .setLabel('¿Qué pasó? Describe brevemente el raideo')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true)
+        )
+    );
+
+    return modal;
+}
+
+async function prorrogarSolicitud(interaction, client, solicitudId) {
+    if (!interaction.member.permissions.has('ManageMessages')) {
+        await interaction.reply({ content: '⛔ Solo los admins pueden prorrogar.', flags: MessageFlags.Ephemeral });
+        return;
+    }
+
+    const bandera = cargarBandera();
+    const solicitud = bandera[solicitudId];
+    if (!solicitud || solicitud.estado !== 'activo') {
+        await interaction.reply({ content: '❌ No se puede prorrogar esta protección.', flags: MessageFlags.Ephemeral });
+        return;
+    }
+
+    // Añadir 24h a la expiración actual
+    const nuevaExpiracion = new Date(new Date(solicitud.fechaExpiracion).getTime() + 24 * 60 * 60 * 1000);
+    solicitud.fechaExpiracion = nuevaExpiracion.toISOString();
+    solicitud.aviso24hEnviado = false; // resetear para que vuelva a avisar
+    guardarBandera(bandera);
+
+    await interaction.update({
+        embeds: [construirEmbedCanal(solicitud)],
+        components: construirBotonesCanal(solicitud)
+    });
+
+    // DM al jugador
+    try {
+        const usuario = await client.users.fetch(solicitud.discordId);
+        await usuario.send({
+            embeds: [new EmbedBuilder()
+                .setTitle('⏰ Tu Bandera Blanca ha sido prorrogada')
+                .setColor(0x3498DB)
+                .setDescription(
+                    `Un admin ha extendido tu protección +24 horas.\n\n` +
+                    `Nueva expiración: <t:${Math.floor(nuevaExpiracion.getTime() / 1000)}:F>`
+                )
+            ]
+        });
+    } catch (e) {}
 }
 
 // --- EMBED FIJO DE SOLICITUD (mensaje permanente en canal público) ---
@@ -210,14 +278,23 @@ function construirBotonesCanal(solicitud) {
     }
 
     if (solicitud.estado === 'activo') {
-        return [new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`bb_quitar_${solicitud.id}`)
-                .setLabel('🗑️ Quitar protección ahora')
-                .setStyle(ButtonStyle.Danger),
-            new ButtonBuilder()
-                .setCustomId(`bb_cerrar_${solicitud.id}`)
-                .setLabel('🔒 Cerrar canal')
+        return [
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`bb_prorrogar_${solicitud.id}`)
+                    .setLabel('⏰ Prorrogar +24h')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId(`bb_quitar_${solicitud.id}`)
+                    .setLabel('🗑️ Quitar protección')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId(`bb_cerrar_${solicitud.id}`)
+                    .setLabel('🔒 Cerrar canal')
+                    .setStyle(ButtonStyle.Secondary)
+            )
+        ];
+    }
                 .setStyle(ButtonStyle.Secondary)
         )];
     }
@@ -290,6 +367,10 @@ async function handleButton(interaction, client) {
                     .setLabel('✅ Todo listo, solicitar ahora')
                     .setStyle(ButtonStyle.Success),
                 new ButtonBuilder()
+                    .setCustomId('bb_solicitar_postraideo')
+                    .setLabel('⚔️ Fui raideado, solicitar protección')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
                     .setCustomId('bb_cancelar_solicitud')
                     .setLabel('❌ Cancelar')
                     .setStyle(ButtonStyle.Secondary)
@@ -299,8 +380,14 @@ async function handleButton(interaction, client) {
         return;
     }
 
-    if (id === 'bb_confirmar_solicitud') {
-        await interaction.showModal(construirModalSolicitud());
+    if (id === 'bb_solicitar_postraideo') {
+        await interaction.showModal(construirModalPostraideo());
+        return;
+    }
+
+    if (id.startsWith('bb_prorrogar_')) {
+        const solicitudId = id.replace('bb_prorrogar_', '');
+        await prorrogarSolicitud(interaction, client, solicitudId);
         return;
     }
 
@@ -354,6 +441,83 @@ async function handleButton(interaction, client) {
 // --- GESTIÓN DE MODALES ---
 
 async function handleModal(interaction, client) {
+    if (interaction.customId === 'bb_modal_postraideo') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        const nombreArk = interaction.fields.getTextInputValue('nombre_ark').trim();
+        const nombreTribu = interaction.fields.getTextInputValue('nombre_tribu').trim();
+        const descripcion = interaction.fields.getTextInputValue('descripcion_raideo').trim();
+
+        const id = Date.now().toString();
+        const solicitud = {
+            id,
+            discordId: interaction.user.id,
+            discordUsername: interaction.user.username,
+            nombreArk,
+            nombreTribu: nombreTribu || null,
+            estado: 'pendiente',
+            tipo: 'postraideo',
+            descripcionRaideo: descripcion,
+            fechaSolicitud: new Date().toISOString(),
+            fechaActivacion: null,
+            fechaExpiracion: null,
+            canalId: null,
+            aviso24hEnviado: false
+        };
+
+        const bandera = cargarBandera();
+        bandera[id] = solicitud;
+        guardarBandera(bandera);
+
+        // Crear canal privado
+        const guild = interaction.guild;
+        const canalTickets = await client.channels.fetch(config.canales.tickets).catch(() => null);
+        const categoria = canalTickets?.parentId || null;
+        const rolAdmin = guild.roles.cache.get(config.roles.admin);
+        const rolMod = guild.roles.cache.get(config.roles.moderador);
+
+        const overwrites = [
+            { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+            { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+            { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] }
+        ];
+        if (rolAdmin) overwrites.push({ id: rolAdmin.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
+        if (rolMod) overwrites.push({ id: rolMod.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
+
+        const canal = await guild.channels.create({
+            name: `postraideo-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 90),
+            type: ChannelType.GuildText,
+            parent: categoria,
+            permissionOverwrites: overwrites
+        });
+
+        solicitud.canalId = canal.id;
+        guardarBandera(bandera);
+
+        const embed = new EmbedBuilder()
+            .setTitle('⚔️ Solicitud Protección Post-Raideo')
+            .setColor(0xE74C3C)
+            .addFields(
+                { name: '👤 Jugador', value: `${interaction.user.username} (${nombreArk})`, inline: true },
+                { name: '🛡️ Tribu', value: nombreTribu || 'Sin tribu', inline: true },
+                { name: '📋 Descripción del raideo', value: descripcion, inline: false }
+            )
+            .setDescription('⚠️ **Solicitud especial post-raideo** — valorar si aplica protección.')
+            .setTimestamp();
+
+        await canal.send({
+            content: `${interaction.user}`,
+            embeds: [embed],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`bb_activar_${id}`).setLabel('✅ Conceder protección').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`bb_denegar_cueva_${id}`).setLabel('❌ Denegar').setStyle(ButtonStyle.Danger)
+            )]
+        });
+
+        await interaction.editReply({ content: `✅ Solicitud enviada. Te atenderemos en <#${canal.id}> lo antes posible.` });
+        return;
+    }
+
     if (interaction.customId === 'bb_modal_solicitar') {
         try {
             const nombreArk = interaction.fields.getTextInputValue('nombre_ark').trim();
