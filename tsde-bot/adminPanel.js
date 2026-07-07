@@ -552,16 +552,16 @@ function renderJugadores(lista) {
   if (!lista.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:#666;text-align:center">No hay jugadores</td></tr>'; return; }
   tbody.innerHTML = lista.map(j => {
     const dias = Math.floor((Date.now() - new Date(j.fecha_registro).getTime()) / 86400000);
-    return \`<tr>
-      <td><strong>\${j.nombre_ark}</strong></td>
-      <td style="color:#888">\${j.discord_username}</td>
-      <td style="color:#666">hace \${dias}d</td>
-      <td>\${j.sanciones > 0 ? '<span class="badge red">⚠️ '+j.sanciones+'</span>' : '<span class="badge green">✅</span>'}</td>
+    return \'<tr>
+      <td><strong>\' + (j.nombre_ark) + '</strong></td>
+      <td style="color:#888">\' + (j.discord_username) + '</td>
+      <td style="color:#666">hace \' + (dias) + 'd</td>
+      <td>\' + (j.sanciones > 0 ? '<span class="badge red">⚠️ '+j.sanciones+'</span>' : '<span class="badge green">✅</span>') + '</td>
       <td class="actions">
-        <button class="btn btn-yellow" style="font-size:11px" onclick="verJugador('\${j.discord_id}')">Ver ficha</button>
-        <button class="btn btn-red" style="font-size:11px" onclick="sancionarRapido('\${j.discord_id}','\${j.discord_username}')">Sancionar</button>
+        <button class="btn btn-yellow" style="font-size:11px" onclick="verJugador('\' + (j.discord_id))">Ver ficha</button>
+        <button class="btn btn-red" style="font-size:11px" onclick="sancionarRapido('\' + (j.discord_id),'\' + (j.discord_username))">Sancionar</button>
       </td>
-    </tr>\`;
+    </tr>\';
   }).join('');
 }
 
@@ -575,7 +575,7 @@ function filtrarJugadores() {
 async function verJugador(id) {
   const data = await api('jugador/' + id);
   const bb = data.bandera ? (data.bandera.estado === 'activo' ? '🟢 ACTIVA hasta ' + new Date(data.bandera.fecha_expiracion).toLocaleString('es-ES') : '⚪ ' + data.bandera.estado) : '✅ Sin solicitudes';
-  alert(\`👤 \${data.nombre_ark}\\nDiscord: \${data.discord_username}\\nRegistrado: \${new Date(data.fecha_registro).toLocaleDateString('es-ES')}\\n\\nBandera Blanca: \${bb}\\nSanciones: \${data.nivel_sancion || 0}/4\\nAdvertencias: \${data.advertencias}\\nMercader: \${data.mercader ? 'Sí' : 'No'}\`);
+  alert(\'👤 \' + (data.nombre_ark) + '\\nDiscord: \' + (data.discord_username) + '\\nRegistrado: \' + (new Date(data.fecha_registro).toLocaleDateString('es-ES')) + '\\n\\nBandera Blanca: \' + (bb) + '\\nSanciones: \' + (data.nivel_sancion || 0) + '/4\\nAdvertencias: \' + (data.advertencias) + '\\nMercader: \' + (data.mercader ? 'Sí' : 'No') + '\');
 }
 
 // MODERACIÓN
@@ -587,7 +587,7 @@ async function cargarModeracion() {
     pen.innerHTML = '<em style="color:#666">Ningún jugador penalizado</em>';
   } else {
     pen.innerHTML = '<table><thead><tr><th>Nombre ARK</th><th>Acciones</th></tr></thead><tbody>' +
-      data.penalizados.map(p => \`<tr><td>\${p}</td><td><button class="btn btn-green" style="font-size:11px" onclick="perdonarNombre('\${p}')">✅ Quitar penalización</button></td></tr>\`).join('') +
+      data.penalizados.map(p => \'<tr><td>\' + (p) + '</td><td><button class="btn btn-green" style="font-size:11px" onclick="perdonarNombre('\' + (p))">✅ Quitar penalización</button></td></tr>\').join('') +
       '</tbody></table>';
   }
 
@@ -596,12 +596,12 @@ async function cargarModeracion() {
     rep.innerHTML = '<em style="color:#666">No hay reportes pendientes</em>';
   } else {
     rep.innerHTML = '<table><thead><tr><th>Reportado</th><th>Por</th><th>Motivo</th><th>Fecha</th></tr></thead><tbody>' +
-      data.reportes.map(r => \`<tr>
-        <td><strong>\${r.jugador_reportado}</strong></td>
-        <td style="color:#888">\${r.reportado_por}</td>
-        <td style="color:#aaa">\${r.motivo}</td>
-        <td style="color:#666">\${new Date(r.fecha).toLocaleDateString('es-ES')}</td>
-      </tr>\`).join('') + '</tbody></table>';
+      data.reportes.map(r => \'<tr>
+        <td><strong>\' + (r.jugador_reportado) + '</strong></td>
+        <td style="color:#888">\' + (r.reportado_por) + '</td>
+        <td style="color:#aaa">\' + (r.motivo) + '</td>
+        <td style="color:#666">\' + (new Date(r.fecha).toLocaleDateString('es-ES')) + '</td>
+      </tr>\').join('') + '</tbody></table>';
   }
 }
 
@@ -648,34 +648,34 @@ async function cargarBanderas() {
     return;
   }
 
-  lista.innerHTML = [...pendientes.map(b => \`
+  lista.innerHTML = [...pendientes.map(b => \'
     <div style="background:#2a2a1a;border:1px solid #F39C12;border-radius:6px;padding:12px;margin-bottom:8px">
-      <strong>⏳ PENDIENTE — \${b.nombre_ark}</strong>
-      <span style="color:#888;font-size:12px;margin-left:8px">\${b.discord_username}</span>
-      \${b.nombre_tribu ? '<span style="color:#666;font-size:12px"> · Tribu: '+b.nombre_tribu+'</span>' : ''}
+      <strong>⏳ PENDIENTE — \' + (b.nombre_ark) + '</strong>
+      <span style="color:#888;font-size:12px;margin-left:8px">\' + (b.discord_username) + '</span>
+      \' + (b.nombre_tribu ? '<span style="color:#666;font-size:12px"> · Tribu: '+b.nombre_tribu+'</span>' : '') + '
       <div class="actions" style="margin-top:8px">
-          <button class="btn btn-green" style="font-size:11px" onclick="accionBB('\${b.id}','activar')">✅ Activar</button>
-          <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\${b.id}','denegar_cueva')">❌ No cumple</button>
-          <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\${b.id}','denegar_repetida')">❌ Ya usó BB</button>
+          <button class="btn btn-green" style="font-size:11px" onclick="accionBB('\' + (b.id),'activar')">✅ Activar</button>
+          <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\' + (b.id),'denegar_cueva')">❌ No cumple</button>
+          <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\' + (b.id),'denegar_repetida')">❌ Ya usó BB</button>
         </div>
     </div>
-  \`), ...activas.map(b => {
+  \'), ...activas.map(b => {
     const expira = new Date(b.fecha_expiracion);
     const resta = Math.max(0, expira - Date.now());
     const horas = Math.floor(resta / 3600000);
     const mins = Math.floor((resta % 3600000) / 60000);
-    return \`
+    return \'
       <div style="background:#1a2a1a;border:1px solid #4CAF50;border-radius:6px;padding:12px;margin-bottom:8px">
-        <strong>🟢 \${b.nombre_ark}</strong>
-        <span style="color:#888;font-size:12px;margin-left:8px">\${b.discord_username}</span>
-        \${b.nombre_tribu ? '<span style="color:#666;font-size:12px"> · '+b.nombre_tribu+'</span>' : ''}
-        <span class="countdown" style="margin-left:8px">⏱️ \${horas}h \${mins}m restantes</span>
+        <strong>🟢 \' + (b.nombre_ark) + '</strong>
+        <span style="color:#888;font-size:12px;margin-left:8px">\' + (b.discord_username) + '</span>
+        \' + (b.nombre_tribu ? '<span style="color:#666;font-size:12px"> · '+b.nombre_tribu+'</span>' : '') + '
+        <span class="countdown" style="margin-left:8px">⏱️ \' + (horas) + 'h \' + (mins) + 'm restantes</span>
         <div class="actions" style="margin-top:8px">
-          <button class="btn btn-green" style="font-size:11px" onclick="accionBB('\${b.id}','prorrogar')">⏰ Prorrogar +24h</button>
-          <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\${b.id}','quitar')">🗑️ Quitar protección</button>
+          <button class="btn btn-green" style="font-size:11px" onclick="accionBB('\' + (b.id),'prorrogar')">⏰ Prorrogar +24h</button>
+          <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\' + (b.id),'quitar')">🗑️ Quitar protección</button>
         </div>
       </div>
-    \`;
+    \';
   })].join('');
 }
 
@@ -688,24 +688,24 @@ async function accionBB(id, accion) {
 // INCUBADORAS
 async function cargarIncubadoras() {
   const data = await api('incubadoras');
-  document.getElementById('lista-incubadoras').innerHTML = data.map(inc => \`
-    <div style="background:\${inc.estado==='libre'?'#1a2a1a':'#2a1a1a'};border:1px solid \${inc.estado==='libre'?'#4CAF50':'#f44'};border-radius:6px;padding:16px;margin-bottom:8px;display:flex;align-items:center;gap:16px">
-      <div style="font-size:24px">\${inc.estado==='libre'?'✅':'🔒'}</div>
+  document.getElementById('lista-incubadoras').innerHTML = data.map(inc => \'
+    <div style="background:\' + (inc.estado==='libre'?'#1a2a1a':'#2a1a1a') + ';border:1px solid \' + (inc.estado==='libre'?'#4CAF50':'#f44') + ';border-radius:6px;padding:16px;margin-bottom:8px;display:flex;align-items:center;gap:16px">
+      <div style="font-size:24px">\' + (inc.estado==='libre'?'✅':'🔒') + '</div>
       <div style="flex:1">
-        <strong>Incubadora \${inc.id}</strong>
-        <span class="badge \${inc.estado==='libre'?'green':'red'}" style="margin-left:8px">\${inc.estado.toUpperCase()}</span>
-        \${inc.estado==='ocupada' ? '<div style="color:#888;font-size:12px;margin-top:4px">Ocupada por: '+inc.ocupada_por+'</div>' : ''}
+        <strong>Incubadora \' + (inc.id) + '</strong>
+        <span class="badge \' + (inc.estado==='libre'?'green':'red') + '" style="margin-left:8px">\' + (inc.estado.toUpperCase()) + '</span>
+        \' + (inc.estado==='ocupada' ? '<div style="color:#888;font-size:12px;margin-top:4px">Ocupada por: '+inc.ocupada_por+'</div>' : '') + '
       </div>
       <div style="text-align:right">
         <div style="font-size:12px;color:#666">PIN actual</div>
-        <div style="font-family:monospace;font-size:20px;color:#F1C40F">\${inc.pin}</div>
+        <div style="font-family:monospace;font-size:20px;color:#F1C40F">\' + (inc.pin) + '</div>
       </div>
       <div class="actions">
-        \${inc.estado==='ocupada' ? '<button class="btn btn-green" style="font-size:11px" onclick="liberarIncubadora('+inc.id+')">Liberar</button>' : ''}
+        \' + (inc.estado==='ocupada' ? '<button class="btn btn-green" style="font-size:11px" onclick="liberarIncubadora('+inc.id+')">Liberar</button>' : '') + '
         <button class="btn btn-gray" style="font-size:11px" onclick="cambiarPin('+inc.id+')">Cambiar PIN</button>
       </div>
     </div>
-  \`).join('');
+  \').join('');
 }
 
 async function liberarIncubadora(id) {
@@ -729,11 +729,11 @@ async function cargarMercado() {
   const lista = document.getElementById('lista-mercaderes');
   if (!data.length) { lista.innerHTML = '<em style="color:#666">No hay mercaderes activos</em>'; return; }
   lista.innerHTML = '<table><thead><tr><th>Discord</th><th>Puesto</th><th>Acciones</th></tr></thead><tbody>' +
-    data.map(m => \`<tr>
-      <td>\${m.discordUsername || m.discord_id}</td>
-      <td><span class="badge blue">Puesto \${m.puesto || '?'}</span></td>
-      <td><button class="btn btn-red" style="font-size:11px" onclick="quitarMercader('\${m.discord_id}')">Quitar puesto</button></td>
-    </tr>\`).join('') + '</tbody></table>';
+    data.map(m => \'<tr>
+      <td>\' + (m.discordUsername || m.discord_id) + '</td>
+      <td><span class="badge blue">Puesto \' + (m.puesto || '?') + '</span></td>
+      <td><button class="btn btn-red" style="font-size:11px" onclick="quitarMercader('\' + (m.discord_id))">Quitar puesto</button></td>
+    </tr>\').join('') + '</tbody></table>';
 }
 
 async function quitarMercader(id) {
@@ -967,12 +967,12 @@ async function cargarTickets() {
     lista.innerHTML = '<em style="color:#666">No hay tickets activos</em>';
   } else {
     lista.innerHTML = '<table><thead><tr><th>Tipo</th><th>Jugador</th><th>Fecha</th><th>Canal</th></tr></thead><tbody>' +
-      data.abiertos.map(t => \`<tr>
-        <td><span class="badge blue">\${t.tipo}</span></td>
-        <td>\${t.discord_username}</td>
-        <td style="color:#666">\${new Date(t.fecha).toLocaleString('es-ES')}</td>
-        <td style="color:#888;font-size:12px">\${t.canal_id ? '#'+t.canal_id : '-'}</td>
-      </tr>\`).join('') + '</tbody></table>';
+      data.abiertos.map(t => \'<tr>
+        <td><span class="badge blue">\' + (t.tipo) + '</span></td>
+        <td>\' + (t.discord_username) + '</td>
+        <td style="color:#666">\' + (new Date(t.fecha).toLocaleString('es-ES')) + '</td>
+        <td style="color:#888;font-size:12px">\' + (t.canal_id ? '#'+t.canal_id : '-') + '</td>
+      </tr>\').join('') + '</tbody></table>';
   }
 
   const reportes = document.getElementById('lista-reportes-tickets');
@@ -980,12 +980,12 @@ async function cargarTickets() {
     reportes.innerHTML = '<em style="color:#666">No hay reportes pendientes</em>';
   } else {
     reportes.innerHTML = '<table><thead><tr><th>Reportado</th><th>Por</th><th>Motivo</th><th>Fecha</th></tr></thead><tbody>' +
-      data.reportes.map(r => \`<tr>
-        <td><strong>\${r.jugador_reportado}</strong></td>
-        <td style="color:#888">\${r.reportado_por}</td>
-        <td>\${r.motivo}</td>
-        <td style="color:#666">\${new Date(r.fecha).toLocaleDateString('es-ES')}</td>
-      </tr>\`).join('') + '</tbody></table>';
+      data.reportes.map(r => \'<tr>
+        <td><strong>\' + (r.jugador_reportado) + '</strong></td>
+        <td style="color:#888">\' + (r.reportado_por) + '</td>
+        <td>\' + (r.motivo) + '</td>
+        <td style="color:#666">\' + (new Date(r.fecha).toLocaleDateString('es-ES')) + '</td>
+      </tr>\').join('') + '</tbody></table>';
   }
 }
 
@@ -1268,7 +1268,7 @@ async function crearColiseo() {
   const fecha = document.getElementById('col-fecha').value.trim();
   const jugadoresRaw = document.getElementById('col-jugadores').value.trim();
   if (!nombre || !fecha || !jugadoresRaw) return toast('Rellena todos los campos', '#f44');
-  const jugadores = jugadoresRaw.split('\n').map(function(j) { return j.trim(); }).filter(Boolean);
+  const jugadores = jugadoresRaw.split(String.fromCharCode(10)).map(function(j) { return j.trim(); }).filter(Boolean);
   if (jugadores.length === 0) return toast('Añade al menos un jugador', '#f44');
   if (jugadores.length > 34) return toast('Máximo 34 jugadores', '#f44');
   if (!confirm('Se asignarán taquillas a ' + jugadores.length + ' jugadores y se enviarán DMs. ¿Continuar?')) return;
@@ -1427,7 +1427,7 @@ async function crearEncuesta() {
   const pregunta = document.getElementById('enc-pregunta').value.trim();
   const opcionesRaw = document.getElementById('enc-opciones').value.trim();
   if (!pregunta || !opcionesRaw) return toast('Rellena pregunta y opciones', '#f44');
-  const opciones = opcionesRaw.split('\n').map(function(o) { return o.trim(); }).filter(Boolean);
+  const opciones = opcionesRaw.split(String.fromCharCode(10)).map(function(o) { return o.trim(); }).filter(Boolean);
   if (opciones.length < 2) return toast('Mínimo 2 opciones', '#f44');
   const r = await api('votaciones/crear', 'POST', { pregunta, opciones });
   toast(r.ok ? '✅ Encuesta creada en Discord' : '❌ Error', r.ok ? '#4CAF50' : '#f44');
@@ -1460,16 +1460,16 @@ async function cargarBroadcastsGuardados() {
   const data = await api('broadcasts-guardados');
   const lista = document.getElementById('lista-broadcasts-guardados');
   if (!data.length) { lista.innerHTML = '<em style="color:#666">No hay mensajes guardados aún. Crea el primero arriba.</em>'; return; }
-  lista.innerHTML = data.map(b => \`
+  lista.innerHTML = data.map(b => \'
     <div style="background:#111;border:1px solid #333;border-radius:6px;padding:12px;margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <strong style="color:#4CAF50;flex:1">\${b.nombre}</strong>
-        <button class="btn btn-green" style="font-size:11px" onclick="enviarBroadcastGuardado('\${b.id}')">📢 Broadcast</button>
-        <button class="btn btn-red" style="font-size:11px" onclick="borrarBroadcast('\${b.id}')">🗑️</button>
+        <strong style="color:#4CAF50;flex:1">\' + (b.nombre) + '</strong>
+        <button class="btn btn-green" style="font-size:11px" onclick="enviarBroadcastGuardado('\' + (b.id))">📢 Broadcast</button>
+        <button class="btn btn-red" style="font-size:11px" onclick="borrarBroadcast('\' + (b.id))">🗑️</button>
       </div>
-      <div style="font-size:13px;color:#aaa;white-space:pre-wrap">\${b.texto}</div>
+      <div style="font-size:13px;color:#aaa;white-space:pre-wrap">\' + (b.texto) + '</div>
     </div>
-  \`).join('');
+  \').join('');
 }
 
 async function guardarBroadcast() {
