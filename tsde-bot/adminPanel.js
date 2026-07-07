@@ -109,6 +109,8 @@ const HTML_PANEL = `<!DOCTYPE html>
   <a href="#" onclick="showPage('incubadoras', this)">Incubadoras</a>
   <a href="#" onclick="showPage('laberinto', this)">🌀 Laberinto</a>
   <a href="#" onclick="showPage('mercado', this)">Mercado</a>
+  <a href="#" onclick="showPage('halloffame', this)">🏆 Hall of Fame</a>
+  <a href="#" onclick="showPage('coliseo', this)">⚔️ Coliseo</a>
   <a href="#" onclick="showPage('rcon', this)">RCON</a>
   <a href="#" onclick="showPage('logs', this)">Logs</a>
   <a href="#" onclick="logout()" style="color:#f44">Salir</a>
@@ -265,8 +267,51 @@ const HTML_PANEL = `<!DOCTYPE html>
 
 </div>
 
-<!-- MERCADO -->
-<div id="page-mercado" class="page">
+<!-- HALL OF FAME -->
+<div id="page-halloffame" class="page">
+  <div class="section">
+    <h2>🏆 Hall of Fame</h2>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <input id="hof-jugador" placeholder="Nombre del jugador..." style="flex:1;min-width:150px">
+      <input id="hof-categoria" placeholder="Categoría (ej: Laberinto, Coliseo...)" style="flex:1;min-width:150px">
+      <input id="hof-logro" placeholder="Logro o motivo..." style="flex:2;min-width:200px">
+      <button class="btn btn-green" onclick="añadirHoF()">➕ Añadir</button>
+    </div>
+    <div id="lista-hof"><em style="color:#666">Cargando...</em></div>
+  </div>
+</div>
+
+<!-- COLISEO -->
+<div id="page-coliseo" class="page">
+  <div class="section">
+    <h2>⚔️ Coliseo — Evento activo</h2>
+    <div id="coliseo-evento-activo"></div>
+  </div>
+  <div class="section">
+    <h2>➕ Crear nuevo evento y asignar taquillas</h2>
+    <div class="form-group">
+      <label>Nombre del evento</label>
+      <input id="col-nombre" placeholder="Ej: Torneo Coliseo Semana 3">
+    </div>
+    <div class="form-group">
+      <label>Fecha del evento</label>
+      <input id="col-fecha" placeholder="Ej: Domingo 6 de julio">
+    </div>
+    <div class="form-group">
+      <label>Jugadores inscritos (uno por línea, máximo 34)</label>
+      <textarea id="col-jugadores" style="height:120px;resize:vertical" placeholder="Jugador1&#10;Jugador2&#10;Jugador3"></textarea>
+    </div>
+    <button class="btn btn-green" onclick="crearColiseo()">⚔️ Asignar taquillas y enviar DMs</button>
+    <button class="btn btn-red" style="margin-left:8px" onclick="resetearColiseo()">🔄 Resetear taquillas</button>
+  </div>
+  <div class="section">
+    <h2>📋 Asignaciones actuales <span id="col-total" style="color:#666;font-size:13px"></span></h2>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input id="col-buscar" placeholder="Buscar jugador..." oninput="filtrarTaquillas()" style="flex:1">
+    </div>
+    <div id="lista-taquillas"></div>
+  </div>
+</div>
   <div class="section">
     <h2>🛒 Mercaderes activos</h2>
     <div id="lista-mercaderes"></div>
@@ -360,6 +405,8 @@ async function loadPage(name) {
   if (name === 'tickets') await cargarTickets();
   if (name === 'laberinto') renderRanking();
   if (name === 'rcon') await cargarBroadcastsGuardados();
+  if (name === 'halloffame') await cargarHoF();
+  if (name === 'coliseo') await cargarColiseo();
   if (name === 'logs') await cargarLogs();
 }
 
@@ -827,8 +874,132 @@ async function finalizarEvento() {
 }
 
 
-// LOGS
-async function cargarLogs() {
+// HALL OF FAME
+async function cargarHoF() {
+  const data = await api('halloffame');
+  const lista = document.getElementById('lista-hof');
+  if (!data.length) { lista.innerHTML = '<em style="color:#666">El Hall of Fame está vacío</em>'; return; }
+  lista.innerHTML = '<table><thead><tr><th>#</th><th>Jugador</th><th>Categoría</th><th>Logro</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>' +
+    data.map((e, i) => '<tr>' +
+      '<td style="color:#F1C40F;font-weight:bold">' + (i+1) + '</td>' +
+      '<td><strong>' + (e.jugador || e.nombre || '-') + '</strong></td>' +
+      '<td><span class="badge blue">' + (e.categoria || '-') + '</span></td>' +
+      '<td>' + (e.logro || e.descripcion || '-') + '</td>' +
+      '<td style="color:#666">' + (e.fecha ? new Date(e.fecha).toLocaleDateString('es-ES') : '-') + '</td>' +
+      '<td><button class="btn btn-red" style="font-size:11px" onclick="eliminarHoF(' + (e.id || i) + ')">🗑️</button></td>' +
+      '</tr>'
+    ).join('') + '</tbody></table>';
+}
+
+async function añadirHoF() {
+  const jugador = document.getElementById('hof-jugador').value.trim();
+  const categoria = document.getElementById('hof-categoria').value.trim();
+  const logro = document.getElementById('hof-logro').value.trim();
+  if (!jugador || !categoria || !logro) return toast('Rellena todos los campos', '#f44');
+  const r = await api('halloffame', 'POST', { jugador, categoria, logro, fecha: new Date().toISOString() });
+  toast(r.ok ? '✅ Añadido al Hall of Fame' : '❌ Error', r.ok ? '#4CAF50' : '#f44');
+  document.getElementById('hof-jugador').value = '';
+  document.getElementById('hof-categoria').value = '';
+  document.getElementById('hof-logro').value = '';
+  cargarHoF();
+}
+
+async function eliminarHoF(id) {
+  if (!confirm('¿Eliminar esta entrada del Hall of Fame?')) return;
+  const r = await api('halloffame/' + id, 'DELETE');
+  toast(r.ok ? '🗑️ Eliminado' : '❌ Error', r.ok ? '#4CAF50' : '#f44');
+  cargarHoF();
+}
+
+// COLISEO
+let taquillasCache = [];
+
+async function cargarColiseo() {
+  const data = await api('coliseo');
+  taquillasCache = data.asignaciones || [];
+
+  const eventoDiv = document.getElementById('coliseo-evento-activo');
+  if (data.evento_activo && data.evento_activo.nombre) {
+    eventoDiv.innerHTML = '<div style="background:#1a2a3a;border:1px solid #3498DB;border-radius:6px;padding:12px">' +
+      '<strong style="color:#3498DB">⚔️ ' + data.evento_activo.nombre + '</strong>' +
+      '<div style="color:#aaa;font-size:13px;margin-top:4px">Fecha: ' + (data.evento_activo.fecha || '-') + ' · Asignado el: ' + (data.evento_activo.fechaAsignacion || '-') + '</div>' +
+      '<div style="color:#aaa;font-size:13px">Participantes: <strong>' + taquillasCache.length + '</strong></div>' +
+      '</div>';
+  } else {
+    eventoDiv.innerHTML = '<em style="color:#666">No hay evento activo actualmente</em>';
+  }
+
+  document.getElementById('col-total').textContent = taquillasCache.length ? '(' + taquillasCache.length + ' participantes)' : '';
+  renderTaquillas(taquillasCache);
+}
+
+function renderTaquillas(lista) {
+  const div = document.getElementById('lista-taquillas');
+  if (!lista.length) { div.innerHTML = '<em style="color:#666">Sin taquillas asignadas</em>'; return; }
+
+  const ladoA = lista.filter(function(a) { return a.lado === 'A'; });
+  const ladoB = lista.filter(function(a) { return a.lado === 'B'; });
+
+  function renderLado(titulo, asigs) {
+    if (!asigs.length) return '';
+    return '<div style="margin-bottom:16px">' +
+      '<div style="color:#E74C3C;font-weight:bold;margin-bottom:8px">' + titulo + '</div>' +
+      '<table><thead><tr><th>Taquilla</th><th>Lado</th><th>Jugador</th><th>PIN</th><th>Acciones</th></tr></thead><tbody>' +
+      asigs.map(function(a) {
+        return '<tr>' +
+          '<td><span class="badge blue">T' + String(a.taquilla).padStart(2,'0') + '</span></td>' +
+          '<td>' + a.lado + '</td>' +
+          '<td><strong>' + a.jugador + '</strong></td>' +
+          '<td><code style="color:#F1C40F;font-size:15px">' + a.pin + '</code></td>' +
+          '<td><button class="btn btn-gray" style="font-size:11px" onclick="cambiarPin(' + a.taquilla + ')">🔑 Cambiar PIN</button></td>' +
+          '</tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+
+  div.innerHTML = renderLado('🅰️ Lado A (Taquillas 01-17)', ladoA) + renderLado('🅱️ Lado B (Taquillas 18-34)', ladoB);
+}
+
+function filtrarTaquillas() {
+  const q = document.getElementById('col-buscar').value.toLowerCase();
+  renderTaquillas(taquillasCache.filter(function(a) { return a.jugador.toLowerCase().includes(q); }));
+}
+
+async function crearColiseo() {
+  const nombre = document.getElementById('col-nombre').value.trim();
+  const fecha = document.getElementById('col-fecha').value.trim();
+  const jugadoresRaw = document.getElementById('col-jugadores').value.trim();
+  if (!nombre || !fecha || !jugadoresRaw) return toast('Rellena todos los campos', '#f44');
+  const jugadores = jugadoresRaw.split('\n').map(function(j) { return j.trim(); }).filter(Boolean);
+  if (jugadores.length === 0) return toast('Añade al menos un jugador', '#f44');
+  if (jugadores.length > 34) return toast('Máximo 34 jugadores', '#f44');
+  if (!confirm('Se asignarán taquillas a ' + jugadores.length + ' jugadores y se enviarán DMs. ¿Continuar?')) return;
+
+  const r = await api('coliseo/crear', 'POST', { nombre, fecha, jugadores });
+  if (r.ok) {
+    toast('✅ Taquillas asignadas · DMs: ' + r.dmEnviados + '/' + jugadores.length + (r.dmFallidos && r.dmFallidos.length ? ' · Fallidos: ' + r.dmFallidos.join(', ') : ''), '#4CAF50');
+    document.getElementById('col-nombre').value = '';
+    document.getElementById('col-fecha').value = '';
+    document.getElementById('col-jugadores').value = '';
+    cargarColiseo();
+  } else {
+    toast('❌ ' + (r.error || 'Error'), '#f44');
+  }
+}
+
+async function resetearColiseo() {
+  if (!confirm('¿Resetear todas las taquillas? Se perderán los PINes actuales.')) return;
+  const r = await api('coliseo/resetear', 'POST');
+  toast(r.ok ? '✅ Taquillas reseteadas' : '❌ Error', r.ok ? '#4CAF50' : '#f44');
+  cargarColiseo();
+}
+
+async function cambiarPin(numTaquilla) {
+  const nuevoPin = prompt('Nuevo PIN para taquilla ' + numTaquilla + ' (4 dígitos):');
+  if (!nuevoPin || nuevoPin.length !== 4 || isNaN(nuevoPin)) return toast('PIN inválido (debe ser 4 dígitos)', '#f44');
+  const r = await api('coliseo/pin', 'POST', { taquilla: numTaquilla, pin: nuevoPin });
+  toast(r.ok ? '✅ PIN actualizado: ' + nuevoPin : '❌ Error', r.ok ? '#4CAF50' : '#f44');
+  cargarColiseo();
+}
   const r = await api('logs');
   const box = document.getElementById('log-content');
   box.textContent = r.logs || 'Sin logs';
@@ -1204,6 +1375,117 @@ function iniciarAdminPanel(client) {
                 const { hacerBackup } = require('./modules/backupEngine.js');
                 const archivo = hacerBackup();
                 return responderJSON(res, 200, { ok: !!archivo, archivo });
+            }
+
+            // Hall of Fame
+            if (endpoint === 'halloffame' && req.method === 'GET') {
+                return responderJSON(res, 200, database.getHallOfFame());
+            }
+
+            if (endpoint === 'halloffame' && req.method === 'POST') {
+                const body = await leerBody(req);
+                database.addHallOfFame(body);
+                return responderJSON(res, 200, { ok: true });
+            }
+
+            if (endpoint.startsWith('halloffame/') && req.method === 'DELETE') {
+                const id = parseInt(endpoint.slice(11));
+                database.removeHallOfFame(id);
+                return responderJSON(res, 200, { ok: true });
+            }
+
+            // Coliseo — gestión completa
+            if (endpoint === 'coliseo' && req.method === 'GET') {
+                return responderJSON(res, 200, database.getTaquillas());
+            }
+
+            if (endpoint === 'coliseo/crear' && req.method === 'POST') {
+                const body = await leerBody(req);
+                const { nombre, fecha, jugadores } = body;
+
+                if (!jugadores || jugadores.length > 34) {
+                    return responderJSON(res, 400, { error: 'Máximo 34 jugadores' });
+                }
+
+                // Generar pines únicos
+                const pines = new Set();
+                while (pines.size < jugadores.length) {
+                    pines.add(String(Math.floor(1000 + Math.random() * 9000)));
+                }
+                const pinesArr = [...pines];
+
+                const asignaciones = jugadores.map((jugador, i) => ({
+                    taquilla: i + 1,
+                    lado: i + 1 <= 17 ? 'A' : 'B',
+                    jugador,
+                    pin: pinesArr[i]
+                }));
+
+                const data = {
+                    evento_activo: { nombre, fecha, fechaAsignacion: new Date().toLocaleDateString('es-ES') },
+                    asignaciones
+                };
+
+                database.setTaquillas('evento_activo', data.evento_activo);
+                database.setTaquillas('asignaciones', asignaciones);
+
+                // Enviar DMs a jugadores
+                let dmEnviados = 0;
+                let dmFallidos = [];
+
+                try {
+                    const { EmbedBuilder } = require('discord.js');
+                    const guild = await client.guilds.fetch(config.guildId);
+                    await guild.members.fetch();
+
+                    for (const asig of asignaciones) {
+                        try {
+                            const member = guild.members.cache.find(m =>
+                                m.displayName === asig.jugador || m.user.username === asig.jugador
+                            );
+                            if (member) {
+                                await member.send({
+                                    embeds: [new EmbedBuilder()
+                                        .setTitle('🏛️ COLISEO TSDE ARKEANOS')
+                                        .setColor(0xE74C3C)
+                                        .setDescription('Has sido asignado a una taquilla para el evento:\n**' + nombre + '**')
+                                        .addFields(
+                                            { name: '🔢 Tu taquilla', value: 'Nº ' + String(asig.taquilla).padStart(2,'0') + ' (Lado ' + asig.lado + ')', inline: true },
+                                            { name: '🔑 Tu PIN', value: '**' + asig.pin + '**', inline: true },
+                                            { name: '⚠️ Importante', value: 'Guarda este PIN. No lo compartas con nadie.', inline: false }
+                                        )
+                                        .setFooter({ text: 'Evento: ' + fecha })
+                                    ]
+                                });
+                                dmEnviados++;
+                            } else {
+                                dmFallidos.push(asig.jugador);
+                            }
+                        } catch (e) {
+                            dmFallidos.push(asig.jugador);
+                        }
+                    }
+                } catch (e) {
+                    console.error('[COLISEO] Error enviando DMs:', e.message);
+                }
+
+                return responderJSON(res, 200, { ok: true, dmEnviados, dmFallidos });
+            }
+
+            if (endpoint === 'coliseo/resetear' && req.method === 'POST') {
+                database.setTaquillas('evento_activo', null);
+                database.setTaquillas('asignaciones', []);
+                return responderJSON(res, 200, { ok: true });
+            }
+
+            if (endpoint === 'coliseo/pin' && req.method === 'POST') {
+                const body = await leerBody(req);
+                const data = database.getTaquillas();
+                const asig = (data.asignaciones || []).find(a => a.taquilla === body.taquilla);
+                if (!asig) return responderJSON(res, 404, { error: 'Taquilla no encontrada' });
+                asig.pin = body.pin;
+                database.setTaquillas('asignaciones', data.asignaciones);
+                return responderJSON(res, 200, { ok: true });
             }
 
             // Broadcasts guardados
