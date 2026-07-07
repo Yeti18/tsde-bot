@@ -809,10 +809,11 @@ function renderCronometros() {
     const tiempoActual = j.parado ? j.tiempo : (j.start ? Date.now() - j.start : 0);
     const color = j.parado ? '#888' : (j.start ? '#4CAF50' : '#F39C12');
     const estado = j.parado ? '✅ Completado' : (j.start ? '⏱️ Corriendo' : '⏸️ En espera');
+    const safeNombre = nombre.replace(/'/g, "\'");
     let botones = '';
-    if (!j.start && !j.parado) botones += '<button class="btn btn-green" style="font-size:11px" onclick="iniciarJugador(\'' + nombre + '\')">▶ Iniciar</button>';
-    if (j.start && !j.parado) botones += '<button class="btn btn-red" style="font-size:11px" onclick="pararJugador(\'' + nombre + '\')">⏹ Parar</button>';
-    botones += '<button class="btn btn-gray" style="font-size:11px" onclick="quitarJugador(\'' + nombre + '\')">✕</button>';
+    if (!j.start && !j.parado) botones += '<button class="btn btn-green" style="font-size:11px" onclick="iniciarJugador(\'' + safeNombre + '\')">&#9654; Iniciar</button>';
+    if (j.start && !j.parado) botones += '<button class="btn btn-red" style="font-size:11px" onclick="pararJugador(\'' + safeNombre + '\')">&#9209; Parar</button>';
+    botones += '<button class="btn btn-gray" style="font-size:11px" onclick="quitarJugador(\'' + safeNombre + '\')">&#10005;</button>';
     return '<div style="background:#1a1a1a;border:2px solid ' + color + ';border-radius:8px;padding:16px;text-align:center">' +
       '<div style="font-weight:bold;font-size:15px;color:' + color + ';margin-bottom:4px">🦖 ' + nombre + '</div>' +
       '<div style="font-size:11px;color:#666;margin-bottom:8px">' + estado + '</div>' +
@@ -951,7 +952,7 @@ function renderTaquillas(lista) {
           '<td>' + a.lado + '</td>' +
           '<td><strong>' + a.jugador + '</strong></td>' +
           '<td><code style="color:#F1C40F;font-size:15px">' + a.pin + '</code></td>' +
-          '<td><button class="btn btn-gray" style="font-size:11px" onclick="cambiarPin(' + a.taquilla + ')">🔑 Cambiar PIN</button></td>' +
+          '<td><button class="btn btn-gray" style="font-size:11px" onclick="cambiarPinColiseo(' + a.taquilla + ')">🔑 Cambiar PIN</button></td>' +
           '</tr>';
       }).join('') + '</tbody></table></div>';
   }
@@ -993,7 +994,7 @@ async function resetearColiseo() {
   cargarColiseo();
 }
 
-async function cambiarPin(numTaquilla) {
+async function cambiarPinColiseo(numTaquilla) {
   const nuevoPin = prompt('Nuevo PIN para taquilla ' + numTaquilla + ' (4 dígitos):');
   if (!nuevoPin || nuevoPin.length !== 4 || isNaN(nuevoPin)) return toast('PIN inválido (debe ser 4 dígitos)', '#f44');
   const r = await api('coliseo/pin', 'POST', { taquilla: numTaquilla, pin: nuevoPin });
