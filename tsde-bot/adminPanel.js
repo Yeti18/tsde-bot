@@ -771,27 +771,23 @@ function renderAlertas(data) {
   const container = document.getElementById('alertas-container');
   const alertas = [];
 
-  // BB que expiran pronto (menos de 6h)
   if (data.banderasProximas && data.banderasProximas.length > 0) {
     data.banderasProximas.forEach(function(b) {
       const horas = Math.floor((new Date(b.fecha_expiracion) - Date.now()) / 3600000);
-      alertas.push({ tipo: 'yellow', msg: 'BB de <strong>' + b.nombre_ark + '</strong> expira en ' + horas + 'h — <a href="#" onclick="showPage(\'banderas\',null)" style="color:#F1C40F">Gestionar</a>' });
+      alertas.push({ tipo: 'yellow', pagina: 'banderas', msg: 'BB de <strong>' + b.nombre_ark + '</strong> expira en ' + horas + 'h' });
     });
   }
 
-  // Reportes pendientes
   if (data.reportesPendientes > 0) {
-    alertas.push({ tipo: 'red', msg: '<strong>' + data.reportesPendientes + ' reportes</strong> pendientes de revisar — <a href="#" onclick="showPage(\'moderacion\',null)" style="color:#f88">Ver</a>' });
+    alertas.push({ tipo: 'red', pagina: 'moderacion', msg: '<strong>' + data.reportesPendientes + ' reportes</strong> pendientes de revisar' });
   }
 
-  // Tickets sin resolver
   if (data.tickets > 0) {
-    alertas.push({ tipo: 'yellow', msg: '<strong>' + data.tickets + ' tickets</strong> abiertos sin resolver — <a href="#" onclick="showPage(\'tickets\',null)" style="color:#F1C40F">Ver</a>' });
+    alertas.push({ tipo: 'yellow', pagina: 'tickets', msg: '<strong>' + data.tickets + ' tickets</strong> abiertos sin resolver' });
   }
 
-  // BB pendientes de activar
   if (data.banderasPendientes > 0) {
-    alertas.push({ tipo: 'red', msg: '<strong>' + data.banderasPendientes + ' solicitudes</strong> de Bandera Blanca pendientes de revisión — <a href="#" onclick="showPage(\'banderas\',null)" style="color:#f88">Revisar</a>' });
+    alertas.push({ tipo: 'red', pagina: 'banderas', msg: '<strong>' + data.banderasPendientes + ' solicitudes</strong> de Bandera Blanca pendientes' });
   }
 
   if (!alertas.length) {
@@ -803,7 +799,10 @@ function renderAlertas(data) {
     const bg = a.tipo === 'red' ? '#3a1a1a' : '#3a2a1a';
     const border = a.tipo === 'red' ? '#f44' : '#F39C12';
     const icon = a.tipo === 'red' ? '🔴' : '🟡';
-    return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:6px;padding:10px 16px;font-size:13px;margin-bottom:6px">' + icon + ' ' + a.msg + '</div>';
+    return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:6px;padding:10px 16px;font-size:13px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between">' +
+      '<span>' + icon + ' ' + a.msg + '</span>' +
+      '<button class="btn btn-gray" style="font-size:11px;margin-left:12px" data-pagina="' + a.pagina + '" onclick="showPage(this.dataset.pagina,null)">Ver</button>' +
+      '</div>';
   }).join('');
 }
 
