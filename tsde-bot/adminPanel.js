@@ -874,8 +874,7 @@ async function buscarGlobal(query) {
       const iconos = { jugador: '👤', bandera: '🏳️', sancion: '⚠️', ticket: '🎫' };
       div.innerHTML = r.resultados.map(function(res) {
         return '<div style="padding:10px 12px;border-bottom:1px solid #333;cursor:pointer;font-size:13px" ' +
-          'onclick="irAResultado(\'' + res.tipo + '\')" ' +
-          'onmouseover="this.style.background=\'#222\'" onmouseout="this.style.background=\'\'">' +
+          'data-tipo="' + res.tipo + '" onclick="irAResultado(this.dataset.tipo)">' +
           (iconos[res.tipo] || '🔍') + ' <strong>' + res.nombre + '</strong>' +
           '<span style="color:#666;font-size:11px;margin-left:8px">' + res.subtitulo + '</span></div>';
       }).join('');
@@ -1109,9 +1108,8 @@ function renderCronometros() {
     const estado = j.parado ? '✅ Completado' : (j.start ? '⏱️ Corriendo' : '⏸️ En espera');
     const safeNombre = nombre.replace(/'/g, "\'");
     let botones = '';
-    if (!j.start && !j.parado) botones += '<button class="btn btn-green" style="font-size:11px" onclick="iniciarJugador(\'' + safeNombre + '\')">&#9654; Iniciar</button>';
-    if (j.start && !j.parado) botones += '<button class="btn btn-red" style="font-size:11px" onclick="pararJugador(\'' + safeNombre + '\')">&#9209; Parar</button>';
-    botones += '<button class="btn btn-gray" style="font-size:11px" onclick="quitarJugador(\'' + safeNombre + '\')">&#10005;</button>';
+    if (!j.start && !j.parado) botones += '<button class="btn btn-green" style="font-size:11px" data-nombre="' + nombre + '" onclick="iniciarJugador(this.dataset.nombre)">&#9654; Iniciar</button>';
+    if (j.start && !j.parado) botones += '<button class="btn btn-red" style="font-size:11px" data-nombre="' + nombre + '" onclick="pararJugador(this.dataset.nombre)">&#9209; Parar</button>';
     return '<div style="background:#1a1a1a;border:2px solid ' + color + ';border-radius:8px;padding:16px;text-align:center">' +
       '<div style="font-weight:bold;font-size:15px;color:' + color + ';margin-bottom:4px">🦖 ' + nombre + '</div>' +
       '<div style="font-size:11px;color:#666;margin-bottom:8px">' + estado + '</div>' +
@@ -1370,8 +1368,8 @@ async function cargarVotaciones() {
         '<div style="font-size:14px">' + s.texto + '</div>' +
         '</div>' +
         '<div style="display:flex;gap:6px;flex-shrink:0">' +
-        '<button class="btn btn-green" style="font-size:11px" onclick="aprobarSugerencia(\'' + s.id + '\')">✅ Crear encuesta</button>' +
-        '<button class="btn btn-red" style="font-size:11px" onclick="rechazarSugerencia(\'' + s.id + '\')">❌ Rechazar</button>' +
+        '<button class="btn btn-green" style="font-size:11px" data-id="' + s.id + '" onclick="aprobarSugerencia(this.dataset.id)">✅ Crear encuesta</button>' +
+        '<button class="btn btn-red" style="font-size:11px" data-id="' + s.id + '" onclick="rechazarSugerencia(this.dataset.id)">❌ Rechazar</button>' +
         '</div></div></div>';
     }).join('');
   }
@@ -1395,7 +1393,7 @@ async function cargarVotaciones() {
       return '<div style="background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:12px;margin-bottom:8px">' +
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">' +
         '<strong>' + e.pregunta + '</strong>' +
-        '<button class="btn btn-red" style="font-size:11px" onclick="cerrarEncuesta(\'' + e.id + '\')">🔒 Cerrar</button>' +
+        '<button class="btn btn-red" style="font-size:11px" data-id="' + e.id + '" onclick="cerrarEncuesta(this.dataset.id)">🔒 Cerrar</button>' +
         '</div>' +
         '<div style="color:#666;font-size:12px;margin-bottom:8px">Por: ' + e.autor + ' · ' + totalVotos + ' votos totales</div>' +
         opciones + '</div>';
