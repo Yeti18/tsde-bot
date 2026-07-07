@@ -955,6 +955,8 @@ async function guardarNotas() {
     estado.style.color = '#f44';
   }
 }
+
+async function cargarTickets() {
   const data = await api('tickets');
   document.getElementById('tkt-abiertos').textContent = data.abiertos?.length || 0;
   document.getElementById('tkt-cerrados').textContent = data.cerrados || 0;
