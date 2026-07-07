@@ -52,6 +52,7 @@ const HTML_PANEL = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TSDE Admin Panel</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; }
@@ -112,8 +113,15 @@ const HTML_PANEL = `<!DOCTYPE html>
   <a href="#" onclick="showPage('halloffame', this)">🏆 Hall of Fame</a>
   <a href="#" onclick="showPage('coliseo', this)">⚔️ Coliseo</a>
   <a href="#" onclick="showPage('votaciones', this)">🗳️ Votaciones</a>
+  <a href="#" onclick="showPage('estadisticas', this)">📊 Stats</a>
   <a href="#" onclick="showPage('rcon', this)">RCON</a>
   <a href="#" onclick="showPage('logs', this)">Logs</a>
+  <div style="position:relative;margin-left:8px">
+    <input id="buscador-global" placeholder="🔍 Buscar..." 
+      style="background:#222;border:1px solid #444;color:#fff;padding:6px 12px;border-radius:4px;font-size:13px;width:180px"
+      oninput="buscarGlobal(this.value)" onfocus="mostrarResultados()" onblur="setTimeout(ocultarResultados,200)">
+    <div id="resultados-busqueda" style="display:none;position:absolute;right:0;top:36px;background:#1a1a1a;border:1px solid #444;border-radius:6px;width:320px;max-height:400px;overflow-y:auto;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.5)"></div>
+  </div>
   <a href="#" onclick="logout()" style="color:#f44">Salir</a>
 </nav>
 
@@ -355,6 +363,36 @@ const HTML_PANEL = `<!DOCTYPE html>
   </div>
 </div>
 
+<!-- ESTADÍSTICAS -->
+<div id="page-estadisticas" class="page">
+  <div class="grid">
+    <div class="card"><h3>👥 Total registrados</h3><div class="value" id="est-registrados">-</div><div class="sub">jugadores</div></div>
+    <div class="card"><h3>🏳️ Banderas concedidas</h3><div class="value" id="est-banderas">-</div><div class="sub">total histórico</div></div>
+    <div class="card"><h3>🎉 Eventos celebrados</h3><div class="value" id="est-eventos">-</div><div class="sub">total</div></div>
+    <div class="card"><h3>⚠️ Sanciones emitidas</h3><div class="value" id="est-sanciones">-</div><div class="sub">total histórico</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div class="section">
+      <h2>📅 Registros por semana</h2>
+      <canvas id="grafico-registros" height="200"></canvas>
+    </div>
+    <div class="section">
+      <h2>🏳️ Banderas por estado</h2>
+      <canvas id="grafico-banderas" height="200"></canvas>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="section">
+      <h2>🎫 Tickets por tipo</h2>
+      <canvas id="grafico-tickets" height="200"></canvas>
+    </div>
+    <div class="section">
+      <h2>⚠️ Sanciones por nivel</h2>
+      <canvas id="grafico-sanciones" height="200"></canvas>
+    </div>
+  </div>
+</div>
+
 <!-- VOTACIONES -->
 <div id="page-votaciones" class="page">
   <div class="grid">
@@ -473,6 +511,7 @@ async function loadPage(name) {
   if (name === 'rcon') await cargarBroadcastsGuardados();
   if (name === 'halloffame') await cargarHoF();
   if (name === 'coliseo') await cargarColiseo();
+  if (name === 'estadisticas') await cargarEstadisticas();
   if (name === 'votaciones') await cargarVotaciones();
   if (name === 'logs') await cargarLogs();
 }
@@ -497,6 +536,7 @@ async function cargarDashboard() {
   }
 
   renderAlertas(data);
+  comprobarAlertas(data);
   await cargarNotas();
 }
 
@@ -765,6 +805,128 @@ function renderAlertas(data) {
     const icon = a.tipo === 'red' ? '🔴' : '🟡';
     return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:6px;padding:10px 16px;font-size:13px;margin-bottom:6px">' + icon + ' ' + a.msg + '</div>';
   }).join('');
+}
+
+// ESTADÍSTICAS HISTÓRICAS
+let graficos = {};
+
+async function cargarEstadisticas() {
+  const data = await api('estadisticas');
+
+  document.getElementById('est-registrados').textContent = data.totalRegistrados || 0;
+  document.getElementById('est-banderas').textContent = data.totalBanderas || 0;
+  document.getElementById('est-eventos').textContent = data.totalEventos || 0;
+  document.getElementById('est-sanciones').textContent = data.totalSanciones || 0;
+
+  Object.values(graficos).forEach(function(g) { g.destroy(); });
+  graficos = {};
+
+  const opts = {
+    plugins: { legend: { labels: { color: '#aaa' } } },
+    scales: { x: { ticks: { color: '#666' }, grid: { color: '#222' } }, y: { ticks: { color: '#666' }, grid: { color: '#222' }, beginAtZero: true } }
+  };
+
+  if (data.registrosPorSemana && data.registrosPorSemana.length) {
+    graficos.registros = new Chart(document.getElementById('grafico-registros'), {
+      type: 'bar',
+      data: { labels: data.registrosPorSemana.map(function(r) { return r.semana; }), datasets: [{ label: 'Nuevos jugadores', data: data.registrosPorSemana.map(function(r) { return r.total; }), backgroundColor: '#4CAF50aa', borderColor: '#4CAF50', borderWidth: 1 }] },
+      options: opts
+    });
+  }
+
+  if (data.banderasPorEstado) {
+    graficos.banderas = new Chart(document.getElementById('grafico-banderas'), {
+      type: 'doughnut',
+      data: { labels: ['Activas', 'Expiradas', 'Denegadas', 'Pendientes'], datasets: [{ data: [data.banderasPorEstado.activo || 0, data.banderasPorEstado.expirado || 0, data.banderasPorEstado.denegado || 0, data.banderasPorEstado.pendiente || 0], backgroundColor: ['#4CAF50', '#95A5A6', '#E74C3C', '#F39C12'] }] },
+      options: { plugins: { legend: { labels: { color: '#aaa' } } } }
+    });
+  }
+
+  if (data.ticketsPorTipo) {
+    const tipos = Object.keys(data.ticketsPorTipo);
+    graficos.tickets = new Chart(document.getElementById('grafico-tickets'), {
+      type: 'bar',
+      data: { labels: tipos, datasets: [{ label: 'Tickets', data: tipos.map(function(t) { return data.ticketsPorTipo[t]; }), backgroundColor: '#3498DBaa', borderColor: '#3498DB', borderWidth: 1 }] },
+      options: opts
+    });
+  }
+
+  if (data.sancionesPorNivel) {
+    graficos.sanciones = new Chart(document.getElementById('grafico-sanciones'), {
+      type: 'bar',
+      data: { labels: ['Nivel 1', 'Nivel 2', 'Nivel 3', 'Nivel 4'], datasets: [{ label: 'Sanciones', data: [1,2,3,4].map(function(n) { return data.sancionesPorNivel[n] || 0; }), backgroundColor: ['#F39C12aa','#E67E22aa','#E74C3Caa','#8E44ADaa'], borderColor: ['#F39C12','#E67E22','#E74C3C','#8E44AD'], borderWidth: 1 }] },
+      options: opts
+    });
+  }
+}
+
+// BUSCADOR GLOBAL
+let buscarTimeout = null;
+
+async function buscarGlobal(query) {
+  clearTimeout(buscarTimeout);
+  const div = document.getElementById('resultados-busqueda');
+  if (!query || query.length < 2) { div.style.display = 'none'; return; }
+  buscarTimeout = setTimeout(async function() {
+    const r = await api('buscar?q=' + encodeURIComponent(query));
+    if (!r.resultados || !r.resultados.length) {
+      div.innerHTML = '<div style="padding:12px;color:#666;font-size:13px">Sin resultados para "' + query + '"</div>';
+    } else {
+      const iconos = { jugador: '👤', bandera: '🏳️', sancion: '⚠️', ticket: '🎫' };
+      div.innerHTML = r.resultados.map(function(res) {
+        return '<div style="padding:10px 12px;border-bottom:1px solid #333;cursor:pointer;font-size:13px" ' +
+          'onclick="irAResultado(\'' + res.tipo + '\')" ' +
+          'onmouseover="this.style.background=\'#222\'" onmouseout="this.style.background=\'\'">' +
+          (iconos[res.tipo] || '🔍') + ' <strong>' + res.nombre + '</strong>' +
+          '<span style="color:#666;font-size:11px;margin-left:8px">' + res.subtitulo + '</span></div>';
+      }).join('');
+    }
+    div.style.display = 'block';
+  }, 300);
+}
+
+function mostrarResultados() {
+  const div = document.getElementById('resultados-busqueda');
+  if (div.innerHTML) div.style.display = 'block';
+}
+
+function ocultarResultados() {
+  setTimeout(function() { document.getElementById('resultados-busqueda').style.display = 'none'; }, 200);
+}
+
+function irAResultado(tipo) {
+  document.getElementById('resultados-busqueda').style.display = 'none';
+  document.getElementById('buscador-global').value = '';
+  const paginas = { jugador: 'jugadores', bandera: 'banderas', sancion: 'moderacion', ticket: 'tickets' };
+  if (paginas[tipo]) showPage(paginas[tipo], null);
+}
+
+// NOTIFICACIONES DEL NAVEGADOR
+let notifPermiso = false;
+let ultimasAlertasHash = '';
+
+async function iniciarNotificaciones() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    notifPermiso = true;
+  } else if (Notification.permission !== 'denied') {
+    const perm = await Notification.requestPermission();
+    notifPermiso = perm === 'granted';
+  }
+}
+
+function enviarNotificacion(titulo, cuerpo) {
+  if (!notifPermiso || document.visibilityState === 'visible') return;
+  const n = new Notification('🦖 TSDE Admin — ' + titulo, { body: cuerpo });
+  setTimeout(function() { n.close(); }, 5000);
+}
+
+function comprobarAlertas(data) {
+  const hash = (data.reportesPendientes || 0) + '_' + (data.banderasPendientes || 0) + '_' + (data.banderasProximas ? data.banderasProximas.length : 0);
+  if (hash === ultimasAlertasHash) return;
+  ultimasAlertasHash = hash;
+  if (data.reportesPendientes > 0) enviarNotificacion('Reportes pendientes', data.reportesPendientes + ' reportes sin revisar');
+  if (data.banderasPendientes > 0) enviarNotificacion('Banderas Blancas', data.banderasPendientes + ' solicitudes pendientes');
 }
 
 // NOTAS ADMIN
@@ -1350,6 +1512,7 @@ setInterval(() => {
 
 // Cargar dashboard al inicio
 cargarDashboard();
+iniciarNotificaciones();
 </script>
 </body>
 </html>`;
@@ -1689,6 +1852,80 @@ function iniciarAdminPanel(client) {
                 const { hacerBackup } = require('./modules/backupEngine.js');
                 const archivo = hacerBackup();
                 return responderJSON(res, 200, { ok: !!archivo, archivo });
+            }
+
+            // Estadísticas históricas
+            if (endpoint === 'estadisticas') {
+                const jugadores = database.getAllJugadores();
+                const banderas = database.getAllBanderas();
+                const sanciones = database.getAllJugadores().map(j => database.getSancion(j.discord_id)).filter(Boolean);
+                const tickets = (() => { try { const Database = require('better-sqlite3'); const rawDb = new Database('./tsde.db'); const r = rawDb.prepare('SELECT tipo, COUNT(*) as total FROM tickets GROUP BY tipo').all(); rawDb.close(); return r; } catch(e) { return []; } })();
+
+                // Registros por semana (últimas 8 semanas)
+                const ahora = Date.now();
+                const semanas = [];
+                for (let i = 7; i >= 0; i--) {
+                    const inicio = ahora - (i+1) * 7 * 86400000;
+                    const fin = ahora - i * 7 * 86400000;
+                    const total = jugadores.filter(j => { const f = new Date(j.fecha_registro).getTime(); return f >= inicio && f < fin; }).length;
+                    const fecha = new Date(fin);
+                    semanas.push({ semana: fecha.getDate() + '/' + (fecha.getMonth()+1), total });
+                }
+
+                // Banderas por estado
+                const banderasPorEstado = {};
+                banderas.forEach(b => { banderasPorEstado[b.estado] = (banderasPorEstado[b.estado] || 0) + 1; });
+
+                // Tickets por tipo
+                const ticketsPorTipo = {};
+                tickets.forEach(t => { ticketsPorTipo[t.tipo] = t.total; });
+
+                // Sanciones por nivel
+                const sancionesPorNivel = { 1: 0, 2: 0, 3: 0, 4: 0 };
+                sanciones.forEach(s => { if (s.nivel_actual > 0) sancionesPorNivel[s.nivel_actual] = (sancionesPorNivel[s.nivel_actual] || 0) + 1; });
+
+                return responderJSON(res, 200, {
+                    totalRegistrados: jugadores.length,
+                    totalBanderas: banderas.length,
+                    totalEventos: database.getHistorialEventos().length,
+                    totalSanciones: sanciones.reduce((sum, s) => sum + (s.historial ? s.historial.length : 0), 0),
+                    registrosPorSemana: semanas,
+                    banderasPorEstado,
+                    ticketsPorTipo,
+                    sancionesPorNivel
+                });
+            }
+
+            // Buscador global
+            if (endpoint.startsWith('buscar')) {
+                const params = new URLSearchParams(endpoint.split('?')[1] || '');
+                const q = (params.get('q') || '').toLowerCase().trim();
+                if (!q || q.length < 2) return responderJSON(res, 200, { resultados: [] });
+
+                const resultados = [];
+
+                // Buscar en jugadores
+                database.getAllJugadores().forEach(j => {
+                    if (j.nombre_ark.toLowerCase().includes(q) || j.discord_username.toLowerCase().includes(q)) {
+                        resultados.push({ tipo: 'jugador', nombre: j.nombre_ark, subtitulo: j.discord_username, id: j.discord_id });
+                    }
+                });
+
+                // Buscar en banderas blancas
+                database.getAllBanderas().forEach(b => {
+                    if (b.nombre_ark.toLowerCase().includes(q) || b.discord_username.toLowerCase().includes(q)) {
+                        resultados.push({ tipo: 'bandera', nombre: b.nombre_ark + ' (BB)', subtitulo: b.estado, id: b.id });
+                    }
+                });
+
+                // Buscar en penalizados
+                database.getPenalizados().forEach(p => {
+                    if (p.toLowerCase().includes(q)) {
+                        resultados.push({ tipo: 'sancion', nombre: p, subtitulo: 'Penalizado', id: p });
+                    }
+                });
+
+                return responderJSON(res, 200, { resultados: resultados.slice(0, 10) });
             }
 
             // Votaciones
