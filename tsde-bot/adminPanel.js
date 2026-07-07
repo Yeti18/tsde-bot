@@ -111,6 +111,7 @@ const HTML_PANEL = `<!DOCTYPE html>
   <a href="#" onclick="showPage('mercado', this)">Mercado</a>
   <a href="#" onclick="showPage('halloffame', this)">🏆 Hall of Fame</a>
   <a href="#" onclick="showPage('coliseo', this)">⚔️ Coliseo</a>
+  <a href="#" onclick="showPage('votaciones', this)">🗳️ Votaciones</a>
   <a href="#" onclick="showPage('rcon', this)">RCON</a>
   <a href="#" onclick="showPage('logs', this)">Logs</a>
   <a href="#" onclick="logout()" style="color:#f44">Salir</a>
@@ -118,6 +119,9 @@ const HTML_PANEL = `<!DOCTYPE html>
 
 <!-- DASHBOARD -->
 <div id="page-dashboard" class="page active">
+  <!-- ALERTAS -->
+  <div id="alertas-container" style="margin-bottom:16px"></div>
+
   <div class="grid" id="stats-cards">
     <div class="card"><h3>🟢 En el servidor</h3><div class="value" id="stat-online">-</div><div class="sub">jugadores ahora</div></div>
     <div class="card"><h3>👥 Registrados</h3><div class="value" id="stat-registrados">-</div><div class="sub">jugadores totales</div></div>
@@ -126,16 +130,29 @@ const HTML_PANEL = `<!DOCTYPE html>
     <div class="card"><h3>🛒 Mercaderes</h3><div class="value" id="stat-mercaderes">-</div><div class="sub">puestos activos</div></div>
     <div class="card"><h3>⚠️ Penalizados</h3><div class="value" id="stat-penalizados">-</div><div class="sub">actualmente</div></div>
   </div>
-  <div class="section">
-    <h2>🎮 Jugadores en el servidor ahora</h2>
-    <div id="jugadores-online-list"><em style="color:#666">Cargando...</em></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="section">
+      <h2>🎮 Jugadores en el servidor ahora</h2>
+      <div id="jugadores-online-list"><em style="color:#666">Cargando...</em></div>
+    </div>
+    <div class="section">
+      <h2>📝 Notas del equipo admin</h2>
+      <textarea id="notas-admin" style="width:100%;height:120px;resize:vertical;background:#111;border:1px solid #333;color:#fff;padding:8px;border-radius:4px;font-size:13px" placeholder="Escribe notas para el equipo admin..."></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+        <span id="notas-estado" style="font-size:12px;color:#666"></span>
+        <button class="btn btn-green" style="font-size:12px" onclick="guardarNotas()">💾 Guardar</button>
+      </div>
+      <div id="notas-historial" style="margin-top:12px;max-height:150px;overflow-y:auto"></div>
+    </div>
   </div>
   <div class="section">
     <h2>🔧 Acciones rápidas</h2>
     <div class="actions">
       <button class="btn btn-green" onclick="backupManual()">💾 Backup ahora</button>
       <button class="btn btn-yellow" onclick="reiniciarBot()">🔄 Reiniciar bot</button>
-      <button class="btn btn-gray" onclick="loadPage('logs')">📋 Ver logs</button>
+      <button class="btn btn-gray" onclick="showPage('logs', null)">📋 Ver logs</button>
+      <button class="btn btn-gray" onclick="showPage('banderas', null)">🏳️ Banderas</button>
+      <button class="btn btn-gray" onclick="showPage('tickets', null)">🎫 Tickets</button>
     </div>
   </div>
 </div>
@@ -318,6 +335,35 @@ const HTML_PANEL = `<!DOCTYPE html>
   </div>
 </div>
 
+<!-- VOTACIONES -->
+<div id="page-votaciones" class="page">
+  <div class="grid">
+    <div class="card"><h3>📋 Sugerencias pendientes</h3><div class="value" id="vot-pendientes">-</div></div>
+    <div class="card"><h3>🗳️ Encuestas activas</h3><div class="value" id="vot-activas">-</div></div>
+  </div>
+  <div class="section">
+    <h2>📋 Sugerencias de jugadores</h2>
+    <p style="color:#666;font-size:13px;margin-bottom:12px">Las sugerencias que los jugadores envían con /sugerir. Puedes aprobarlas como encuesta o rechazarlas.</p>
+    <div id="lista-sugerencias"><em style="color:#666">Cargando...</em></div>
+  </div>
+  <div class="section">
+    <h2>🗳️ Encuestas activas</h2>
+    <div id="lista-encuestas"><em style="color:#666">Cargando...</em></div>
+  </div>
+  <div class="section">
+    <h2>➕ Crear encuesta manual</h2>
+    <div class="form-group">
+      <label>Pregunta</label>
+      <input id="enc-pregunta" placeholder="¿Queréis que se añada un nuevo modo de juego?">
+    </div>
+    <div class="form-group">
+      <label>Opciones (una por línea, mínimo 2)</label>
+      <textarea id="enc-opciones" style="height:80px;resize:vertical" placeholder="Sí&#10;No&#10;Me da igual"></textarea>
+    </div>
+    <button class="btn btn-green" onclick="crearEncuesta()">🗳️ Crear encuesta en Discord</button>
+  </div>
+</div>
+
 <!-- RCON -->
 <div id="page-rcon" class="page">
   <div class="section">
@@ -407,6 +453,7 @@ async function loadPage(name) {
   if (name === 'rcon') await cargarBroadcastsGuardados();
   if (name === 'halloffame') await cargarHoF();
   if (name === 'coliseo') await cargarColiseo();
+  if (name === 'votaciones') await cargarVotaciones();
   if (name === 'logs') await cargarLogs();
 }
 
@@ -424,10 +471,13 @@ async function cargarDashboard() {
   if (data.jugadoresOnline.length === 0) {
     lista.innerHTML = '<em style="color:#666">Nadie conectado ahora mismo</em>';
   } else {
-    lista.innerHTML = data.jugadoresOnline.map(j =>
-      '<span style="display:inline-block;background:#1a2a1a;border:1px solid #4CAF50;padding:4px 12px;border-radius:20px;margin:4px;font-size:13px">🦖 ' + j + '</span>'
-    ).join('');
+    lista.innerHTML = data.jugadoresOnline.map(function(j) {
+      return '<span style="display:inline-block;background:#1a2a1a;border:1px solid #4CAF50;padding:4px 12px;border-radius:20px;margin:4px;font-size:13px">🦖 ' + j + '</span>';
+    }).join('');
   }
+
+  renderAlertas(data);
+  await cargarNotas();
 }
 
 // JUGADORES
@@ -656,8 +706,75 @@ async function enviarBroadcast() {
   document.getElementById('broadcast-msg').value = '';
 }
 
-// TICKETS
-async function cargarTickets() {
+// ALERTAS DEL DASHBOARD
+function renderAlertas(data) {
+  const container = document.getElementById('alertas-container');
+  const alertas = [];
+
+  // BB que expiran pronto (menos de 6h)
+  if (data.banderasProximas && data.banderasProximas.length > 0) {
+    data.banderasProximas.forEach(function(b) {
+      const horas = Math.floor((new Date(b.fecha_expiracion) - Date.now()) / 3600000);
+      alertas.push({ tipo: 'yellow', msg: 'BB de <strong>' + b.nombre_ark + '</strong> expira en ' + horas + 'h — <a href="#" onclick="showPage(\'banderas\',null)" style="color:#F1C40F">Gestionar</a>' });
+    });
+  }
+
+  // Reportes pendientes
+  if (data.reportesPendientes > 0) {
+    alertas.push({ tipo: 'red', msg: '<strong>' + data.reportesPendientes + ' reportes</strong> pendientes de revisar — <a href="#" onclick="showPage(\'moderacion\',null)" style="color:#f88">Ver</a>' });
+  }
+
+  // Tickets sin resolver
+  if (data.tickets > 0) {
+    alertas.push({ tipo: 'yellow', msg: '<strong>' + data.tickets + ' tickets</strong> abiertos sin resolver — <a href="#" onclick="showPage(\'tickets\',null)" style="color:#F1C40F">Ver</a>' });
+  }
+
+  // BB pendientes de activar
+  if (data.banderasPendientes > 0) {
+    alertas.push({ tipo: 'red', msg: '<strong>' + data.banderasPendientes + ' solicitudes</strong> de Bandera Blanca pendientes de revisión — <a href="#" onclick="showPage(\'banderas\',null)" style="color:#f88">Revisar</a>' });
+  }
+
+  if (!alertas.length) {
+    container.innerHTML = '<div style="background:#1a3a1a;border:1px solid #4CAF50;border-radius:6px;padding:10px 16px;font-size:13px;color:#4CAF50">✅ Todo en orden — sin alertas pendientes</div>';
+    return;
+  }
+
+  container.innerHTML = alertas.map(function(a) {
+    const bg = a.tipo === 'red' ? '#3a1a1a' : '#3a2a1a';
+    const border = a.tipo === 'red' ? '#f44' : '#F39C12';
+    const icon = a.tipo === 'red' ? '🔴' : '🟡';
+    return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:6px;padding:10px 16px;font-size:13px;margin-bottom:6px">' + icon + ' ' + a.msg + '</div>';
+  }).join('');
+}
+
+// NOTAS ADMIN
+async function cargarNotas() {
+  const r = await api('notas');
+  if (r.nota) {
+    document.getElementById('notas-admin').value = r.nota;
+  }
+  if (r.historial && r.historial.length) {
+    document.getElementById('notas-historial').innerHTML =
+      '<div style="font-size:11px;color:#555;margin-bottom:4px">Últimas guardadas:</div>' +
+      r.historial.slice(-3).reverse().map(function(n) {
+        return '<div style="font-size:11px;color:#444;padding:4px 0;border-bottom:1px solid #222">' +
+          '<span style="color:#555">' + new Date(n.fecha).toLocaleString('es-ES') + '</span> — ' + n.admin + '</div>';
+      }).join('');
+  }
+}
+
+async function guardarNotas() {
+  const nota = document.getElementById('notas-admin').value;
+  const r = await api('notas', 'POST', { nota });
+  const estado = document.getElementById('notas-estado');
+  if (r.ok) {
+    estado.textContent = '✅ Guardado — ' + new Date().toLocaleTimeString('es-ES');
+    estado.style.color = '#4CAF50';
+  } else {
+    estado.textContent = '❌ Error al guardar';
+    estado.style.color = '#f44';
+  }
+}
   const data = await api('tickets');
   document.getElementById('tkt-abiertos').textContent = data.abiertos?.length || 0;
   document.getElementById('tkt-cerrados').textContent = data.cerrados || 0;
@@ -1001,6 +1118,95 @@ async function cambiarPinColiseo(numTaquilla) {
   toast(r.ok ? '✅ PIN actualizado: ' + nuevoPin : '❌ Error', r.ok ? '#4CAF50' : '#f44');
   cargarColiseo();
 }
+
+// VOTACIONES
+async function cargarVotaciones() {
+  const data = await api('votaciones');
+  const sugerencias = data.sugerencias || [];
+  const encuestas = data.encuestas || [];
+
+  document.getElementById('vot-pendientes').textContent = sugerencias.length;
+  document.getElementById('vot-activas').textContent = encuestas.filter(function(e) { return !e.cerrada; }).length;
+
+  const listaSug = document.getElementById('lista-sugerencias');
+  if (!sugerencias.length) {
+    listaSug.innerHTML = '<em style="color:#666">No hay sugerencias pendientes</em>';
+  } else {
+    listaSug.innerHTML = sugerencias.map(function(s) {
+      return '<div style="background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:12px;margin-bottom:8px">' +
+        '<div style="display:flex;align-items:flex-start;gap:12px">' +
+        '<div style="flex:1">' +
+        '<div style="color:#aaa;font-size:12px;margin-bottom:4px">👤 ' + s.autor + ' · ' + new Date(s.fecha).toLocaleDateString('es-ES') + '</div>' +
+        '<div style="font-size:14px">' + s.texto + '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;flex-shrink:0">' +
+        '<button class="btn btn-green" style="font-size:11px" onclick="aprobarSugerencia(\'' + s.id + '\')">✅ Crear encuesta</button>' +
+        '<button class="btn btn-red" style="font-size:11px" onclick="rechazarSugerencia(\'' + s.id + '\')">❌ Rechazar</button>' +
+        '</div></div></div>';
+    }).join('');
+  }
+
+  const listaEnc = document.getElementById('lista-encuestas');
+  const activas = encuestas.filter(function(e) { return !e.cerrada; });
+  if (!activas.length) {
+    listaEnc.innerHTML = '<em style="color:#666">No hay encuestas activas</em>';
+  } else {
+    listaEnc.innerHTML = activas.map(function(e) {
+      const totalVotos = Object.values(e.votos || {}).reduce(function(sum, arr) { return sum + (arr.length || 0); }, 0);
+      const opciones = (e.opciones || []).map(function(op, i) {
+        const votos = (e.votos && e.votos[i]) ? e.votos[i].length : 0;
+        const pct = totalVotos > 0 ? Math.round(votos / totalVotos * 100) : 0;
+        return '<div style="margin:4px 0">' +
+          '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px">' +
+          '<span>' + op + '</span><span style="color:#888">' + votos + ' votos (' + pct + '%)</span></div>' +
+          '<div style="background:#333;border-radius:4px;height:6px">' +
+          '<div style="background:#4CAF50;width:' + pct + '%;height:100%;border-radius:4px"></div></div></div>';
+      }).join('');
+      return '<div style="background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:12px;margin-bottom:8px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">' +
+        '<strong>' + e.pregunta + '</strong>' +
+        '<button class="btn btn-red" style="font-size:11px" onclick="cerrarEncuesta(\'' + e.id + '\')">🔒 Cerrar</button>' +
+        '</div>' +
+        '<div style="color:#666;font-size:12px;margin-bottom:8px">Por: ' + e.autor + ' · ' + totalVotos + ' votos totales</div>' +
+        opciones + '</div>';
+    }).join('');
+  }
+}
+
+async function aprobarSugerencia(id) {
+  const r = await api('votaciones/aprobar', 'POST', { id });
+  toast(r.ok ? '✅ Encuesta creada en Discord' : '❌ ' + (r.error || 'Error'), r.ok ? '#4CAF50' : '#f44');
+  cargarVotaciones();
+}
+
+async function rechazarSugerencia(id) {
+  if (!confirm('¿Rechazar esta sugerencia?')) return;
+  const r = await api('votaciones/rechazar', 'POST', { id });
+  toast(r.ok ? '🗑️ Sugerencia rechazada' : '❌ Error', r.ok ? '#4CAF50' : '#f44');
+  cargarVotaciones();
+}
+
+async function cerrarEncuesta(id) {
+  if (!confirm('¿Cerrar esta encuesta?')) return;
+  const r = await api('votaciones/cerrar', 'POST', { id });
+  toast(r.ok ? '✅ Encuesta cerrada' : '❌ Error', r.ok ? '#4CAF50' : '#f44');
+  cargarVotaciones();
+}
+
+async function crearEncuesta() {
+  const pregunta = document.getElementById('enc-pregunta').value.trim();
+  const opcionesRaw = document.getElementById('enc-opciones').value.trim();
+  if (!pregunta || !opcionesRaw) return toast('Rellena pregunta y opciones', '#f44');
+  const opciones = opcionesRaw.split('\n').map(function(o) { return o.trim(); }).filter(Boolean);
+  if (opciones.length < 2) return toast('Mínimo 2 opciones', '#f44');
+  const r = await api('votaciones/crear', 'POST', { pregunta, opciones });
+  toast(r.ok ? '✅ Encuesta creada en Discord' : '❌ Error', r.ok ? '#4CAF50' : '#f44');
+  document.getElementById('enc-pregunta').value = '';
+  document.getElementById('enc-opciones').value = '';
+  cargarVotaciones();
+}
+
+async function cargarLogs() {
   const r = await api('logs');
   const box = document.getElementById('log-content');
   box.textContent = r.logs || 'Sin logs';
@@ -1171,15 +1377,53 @@ function iniciarAdminPanel(client) {
             // Dashboard
             if (endpoint === 'dashboard') {
                 const jugadoresOnline = database.getJugadoresOnline();
+                const todasBanderas = database.getAllBanderas();
+                const banderasActivas = todasBanderas.filter(b => b.estado === 'activo');
+                const ahora = Date.now();
+
+                // BB que expiran en menos de 6h
+                const banderasProximas = banderasActivas.filter(b => {
+                    const exp = new Date(b.fecha_expiracion).getTime();
+                    return exp - ahora < 6 * 3600000 && exp > ahora;
+                });
+
+                // BB pendientes de activar
+                const banderasPendientes = todasBanderas.filter(b => b.estado === 'pendiente').length;
+
                 return responderJSON(res, 200, {
                     online: jugadoresOnline.length,
                     registrados: database.countJugadores(),
-                    banderas: database.getAllBanderas().filter(b => b.estado === 'activo').length,
+                    banderas: banderasActivas.length,
                     tickets: database.countReportesPendientes(),
                     mercaderes: database.countMercaderes(),
                     penalizados: database.getPenalizados().length,
-                    jugadoresOnline
+                    jugadoresOnline,
+                    banderasProximas,
+                    banderasPendientes,
+                    reportesPendientes: database.countReportesPendientes()
                 });
+            }
+
+            // Notas admin
+            if (endpoint === 'notas' && req.method === 'GET') {
+                try {
+                    const notas = JSON.parse(fs.readFileSync('./notas_admin.json', 'utf8'));
+                    return responderJSON(res, 200, notas);
+                } catch (e) {
+                    return responderJSON(res, 200, { nota: '', historial: [] });
+                }
+            }
+
+            if (endpoint === 'notas' && req.method === 'POST') {
+                const body = await leerBody(req);
+                let notas = { nota: '', historial: [] };
+                try { notas = JSON.parse(fs.readFileSync('./notas_admin.json', 'utf8')); } catch (e) {}
+                notas.historial = notas.historial || [];
+                notas.historial.push({ fecha: new Date().toISOString(), admin: 'Admin Panel' });
+                if (notas.historial.length > 10) notas.historial = notas.historial.slice(-10);
+                notas.nota = body.nota;
+                fs.writeFileSync('./notas_admin.json', JSON.stringify(notas, null, 2));
+                return responderJSON(res, 200, { ok: true });
             }
 
             // Jugadores
@@ -1376,6 +1620,119 @@ function iniciarAdminPanel(client) {
                 const { hacerBackup } = require('./modules/backupEngine.js');
                 const archivo = hacerBackup();
                 return responderJSON(res, 200, { ok: !!archivo, archivo });
+            }
+
+            // Votaciones
+            if (endpoint === 'votaciones' && req.method === 'GET') {
+                const vot = database.getVotaciones();
+                const polls = database.getAllPolls();
+                return responderJSON(res, 200, {
+                    sugerencias: vot.sugerencias_pendientes || [],
+                    encuestas: polls
+                });
+            }
+
+            if (endpoint === 'votaciones/aprobar' && req.method === 'POST') {
+                const body = await leerBody(req);
+                const vot = database.getVotaciones();
+                const sugs = vot.sugerencias_pendientes || [];
+                const sug = sugs.find(s => s.id === body.id);
+                if (!sug) return responderJSON(res, 404, { error: 'Sugerencia no encontrada' });
+
+                // Crear encuesta en Discord
+                try {
+                    const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+                    const canal = await client.channels.fetch(config.canales.general);
+                    const pollId = Date.now().toString();
+                    const poll = {
+                        id: pollId,
+                        pregunta: sug.texto,
+                        opciones: ['✅ Sí', '❌ No'],
+                        votos: { 0: [], 1: [] },
+                        autor: sug.autor,
+                        cerrada: false,
+                        fecha: new Date().toISOString()
+                    };
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('🗳️ ' + sug.texto)
+                        .setColor(0x3498DB)
+                        .setDescription('Sugerencia de **' + sug.autor + '**\nVota usando los botones:')
+                        .setTimestamp();
+
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('poll_' + pollId + '_0').setLabel('✅ Sí').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId('poll_' + pollId + '_1').setLabel('❌ No').setStyle(ButtonStyle.Danger)
+                    );
+
+                    const msg = await canal.send({ embeds: [embed], components: [row] });
+                    poll.mensaje_id = msg.id;
+                    poll.canal_id = canal.id;
+                    database.setPoll(pollId, poll);
+
+                    // Quitar de sugerencias pendientes
+                    database.setVotaciones('sugerencias_pendientes', sugs.filter(s => s.id !== body.id));
+                    return responderJSON(res, 200, { ok: true });
+                } catch (e) {
+                    return responderJSON(res, 500, { error: e.message });
+                }
+            }
+
+            if (endpoint === 'votaciones/rechazar' && req.method === 'POST') {
+                const body = await leerBody(req);
+                const vot = database.getVotaciones();
+                const sugs = (vot.sugerencias_pendientes || []).filter(s => s.id !== body.id);
+                database.setVotaciones('sugerencias_pendientes', sugs);
+                return responderJSON(res, 200, { ok: true });
+            }
+
+            if (endpoint === 'votaciones/cerrar' && req.method === 'POST') {
+                const body = await leerBody(req);
+                const poll = database.getPoll(body.id);
+                if (!poll) return responderJSON(res, 404, { error: 'Encuesta no encontrada' });
+                poll.cerrada = true;
+                database.setPoll(body.id, poll);
+                return responderJSON(res, 200, { ok: true });
+            }
+
+            if (endpoint === 'votaciones/crear' && req.method === 'POST') {
+                const body = await leerBody(req);
+                try {
+                    const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+                    const canal = await client.channels.fetch(config.canales.general);
+                    const pollId = Date.now().toString();
+                    const votos = {};
+                    body.opciones.forEach((_, i) => { votos[i] = []; });
+                    const poll = {
+                        id: pollId,
+                        pregunta: body.pregunta,
+                        opciones: body.opciones,
+                        votos,
+                        autor: 'Admin Panel',
+                        cerrada: false,
+                        fecha: new Date().toISOString()
+                    };
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('🗳️ ' + body.pregunta)
+                        .setColor(0x9B59B6)
+                        .setTimestamp();
+
+                    const EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
+                    const row = new ActionRowBuilder().addComponents(
+                        body.opciones.slice(0, 5).map((op, i) =>
+                            new ButtonBuilder().setCustomId('poll_' + pollId + '_' + i).setLabel(EMOJIS[i] + ' ' + op).setStyle(ButtonStyle.Primary)
+                        )
+                    );
+
+                    const msg = await canal.send({ embeds: [embed], components: [row] });
+                    poll.mensaje_id = msg.id;
+                    poll.canal_id = canal.id;
+                    database.setPoll(pollId, poll);
+                    return responderJSON(res, 200, { ok: true });
+                } catch (e) {
+                    return responderJSON(res, 500, { error: e.message });
+                }
             }
 
             // Hall of Fame
