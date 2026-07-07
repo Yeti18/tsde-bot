@@ -550,20 +550,21 @@ async function cargarJugadores() {
 function renderJugadores(lista) {
   const tbody = document.getElementById('tabla-jugadores');
   if (!lista.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:#666;text-align:center">No hay jugadores</td></tr>'; return; }
-  tbody.innerHTML = lista.map(j => {
+  tbody.innerHTML = lista.map(function(j) {
     const dias = Math.floor((Date.now() - new Date(j.fecha_registro).getTime()) / 86400000);
-    return \'<tr>
-      <td><strong>\' + (j.nombre_ark) + '</strong></td>
-      <td style="color:#888">\' + (j.discord_username) + '</td>
-      <td style="color:#666">hace \' + (dias) + 'd</td>
-      <td>\' + (j.sanciones > 0 ? '<span class="badge red">⚠️ '+j.sanciones+'</span>' : '<span class="badge green">✅</span>') + '</td>
-      <td class="actions">
-        <button class="btn btn-yellow" style="font-size:11px" onclick="verJugador('\' + (j.discord_id))">Ver ficha</button>
-        <button class="btn btn-red" style="font-size:11px" onclick="sancionarRapido('\' + (j.discord_id),'\' + (j.discord_username))">Sancionar</button>
-      </td>
-    </tr>\';
+    const sancionBadge = j.sanciones > 0 ? '<span class="badge red">⚠️ ' + j.sanciones + '</span>' : '<span class="badge green">✅</span>';
+    return '<tr>' +
+      '<td><strong>' + j.nombre_ark + '</strong></td>' +
+      '<td style="color:#888">' + j.discord_username + '</td>' +
+      '<td style="color:#666">hace ' + dias + 'd</td>' +
+      '<td>' + sancionBadge + '</td>' +
+      '<td class="actions">' +
+      '<button class="btn btn-yellow" style="font-size:11px" data-id="' + j.discord_id + '" onclick="verJugador(this.dataset.id)">Ver ficha</button>' +
+      '<button class="btn btn-red" style="font-size:11px" data-id="' + j.discord_id + '" data-user="' + j.discord_username + '" onclick="sancionarRapido(this.dataset.id,this.dataset.user)">Sancionar</button>' +
+      '</td></tr>';
   }).join('');
 }
+
 
 function filtrarJugadores() {
   const q = document.getElementById('buscar-jugador').value.toLowerCase();
@@ -640,44 +641,45 @@ function sancionarRapido(id, username) {
 async function cargarBanderas() {
   const data = await api('banderas');
   const lista = document.getElementById('lista-banderas');
-  const activas = data.filter(b => b.estado === 'activo');
-  const pendientes = data.filter(b => b.estado === 'pendiente');
+  const pendientes = data.filter(function(b) { return b.estado === 'pendiente'; });
+  const activas = data.filter(function(b) { return b.estado === 'activo'; });
 
   if (!activas.length && !pendientes.length) {
     lista.innerHTML = '<em style="color:#666">No hay banderas activas ni pendientes</em>';
     return;
   }
 
-  lista.innerHTML = [...pendientes.map(b => \'
-    <div style="background:#2a2a1a;border:1px solid #F39C12;border-radius:6px;padding:12px;margin-bottom:8px">
-      <strong>⏳ PENDIENTE — \' + (b.nombre_ark) + '</strong>
-      <span style="color:#888;font-size:12px;margin-left:8px">\' + (b.discord_username) + '</span>
-      \' + (b.nombre_tribu ? '<span style="color:#666;font-size:12px"> · Tribu: '+b.nombre_tribu+'</span>' : '') + '
-      <div class="actions" style="margin-top:8px">
-          <button class="btn btn-green" style="font-size:11px" onclick="accionBB('\' + (b.id),'activar')">✅ Activar</button>
-          <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\' + (b.id),'denegar_cueva')">❌ No cumple</button>
-          <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\' + (b.id),'denegar_repetida')">❌ Ya usó BB</button>
-        </div>
-    </div>
-  \'), ...activas.map(b => {
+  function renderPendiente(b) {
+    return '<div style="background:#2a2a1a;border:1px solid #F39C12;border-radius:6px;padding:12px;margin-bottom:8px">' +
+      '<strong>⏳ PENDIENTE — ' + b.nombre_ark + '</strong>' +
+      '<span style="color:#888;font-size:12px;margin-left:8px">' + b.discord_username + '</span>' +
+      (b.nombre_tribu ? '<span style="color:#666;font-size:12px"> · Tribu: ' + b.nombre_tribu + '</span>' : '') +
+      '<div class="actions" style="margin-top:8px">' +
+      '<button class="btn btn-green" style="font-size:11px" data-id="' + b.id + '" onclick="accionBB(this.dataset.id,'activar')">✅ Activar</button>' +
+      '<button class="btn btn-red" style="font-size:11px" data-id="' + b.id + '" onclick="accionBB(this.dataset.id,'denegar_cueva')">❌ No cumple</button>' +
+      '<button class="btn btn-red" style="font-size:11px" data-id="' + b.id + '" onclick="accionBB(this.dataset.id,'denegar_repetida')">❌ Ya usó BB</button>' +
+      '</div></div>';
+  }
+
+  function renderActiva(b) {
     const expira = new Date(b.fecha_expiracion);
     const resta = Math.max(0, expira - Date.now());
     const horas = Math.floor(resta / 3600000);
     const mins = Math.floor((resta % 3600000) / 60000);
-    return \'
-      <div style="background:#1a2a1a;border:1px solid #4CAF50;border-radius:6px;padding:12px;margin-bottom:8px">
-        <strong>🟢 \' + (b.nombre_ark) + '</strong>
-        <span style="color:#888;font-size:12px;margin-left:8px">\' + (b.discord_username) + '</span>
-        \' + (b.nombre_tribu ? '<span style="color:#666;font-size:12px"> · '+b.nombre_tribu+'</span>' : '') + '
-        <span class="countdown" style="margin-left:8px">⏱️ \' + (horas) + 'h \' + (mins) + 'm restantes</span>
-        <div class="actions" style="margin-top:8px">
-          <button class="btn btn-green" style="font-size:11px" onclick="accionBB('\' + (b.id),'prorrogar')">⏰ Prorrogar +24h</button>
-          <button class="btn btn-red" style="font-size:11px" onclick="accionBB('\' + (b.id),'quitar')">🗑️ Quitar protección</button>
-        </div>
-      </div>
-    \';
-  })].join('');
+    return '<div style="background:#1a2a1a;border:1px solid #4CAF50;border-radius:6px;padding:12px;margin-bottom:8px">' +
+      '<strong>🟢 ' + b.nombre_ark + '</strong>' +
+      '<span style="color:#888;font-size:12px;margin-left:8px">' + b.discord_username + '</span>' +
+      (b.nombre_tribu ? '<span style="color:#666;font-size:12px"> · ' + b.nombre_tribu + '</span>' : '') +
+      '<span class="countdown" style="margin-left:8px">⏱️ ' + horas + 'h ' + mins + 'm restantes</span>' +
+      '<div class="actions" style="margin-top:8px">' +
+      '<button class="btn btn-green" style="font-size:11px" data-id="' + b.id + '" onclick="accionBB(this.dataset.id,'prorrogar')">⏰ Prorrogar +24h</button>' +
+      '<button class="btn btn-red" style="font-size:11px" data-id="' + b.id + '" onclick="accionBB(this.dataset.id,'quitar')">🗑️ Quitar</button>' +
+      '</div></div>';
+  }
+
+  lista.innerHTML = pendientes.map(renderPendiente).concat(activas.map(renderActiva)).join('');
 }
+
 
 async function accionBB(id, accion) {
   const r = await api('bandera/' + accion, 'POST', { id });
