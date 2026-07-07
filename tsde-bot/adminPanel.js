@@ -155,6 +155,26 @@ const HTML_PANEL = `<!DOCTYPE html>
       <button class="btn btn-gray" onclick="showPage('tickets', null)">🎫 Tickets</button>
     </div>
   </div>
+  <div class="section">
+    <h2>⏱️ Temporizador de evento</h2>
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+      <div class="form-group" style="margin:0;flex:1;min-width:200px">
+        <label>Nombre del evento</label>
+        <input id="timer-nombre" placeholder="Ej: Torneo Coliseo">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Fecha y hora</label>
+        <input id="timer-fecha" type="datetime-local">
+      </div>
+      <button class="btn btn-green" onclick="iniciarTimer()">⏱️ Activar</button>
+      <button class="btn btn-red" onclick="pararTimer()">✕ Cancelar</button>
+    </div>
+    <div id="timer-display" style="display:none;background:#111;border:1px solid #4CAF50;border-radius:8px;padding:16px;text-align:center">
+      <div id="timer-evento-nombre" style="color:#888;font-size:13px;margin-bottom:4px"></div>
+      <div id="timer-countdown" style="font-family:monospace;font-size:48px;color:#4CAF50"></div>
+      <div id="timer-fecha-texto" style="color:#666;font-size:12px;margin-top:4px"></div>
+    </div>
+  </div>
 </div>
 
 <!-- JUGADORES -->
@@ -1119,7 +1139,56 @@ async function cambiarPinColiseo(numTaquilla) {
   cargarColiseo();
 }
 
-// VOTACIONES
+// TEMPORIZADOR DE EVENTO
+let timerInterval = null;
+let timerTarget = null;
+
+function iniciarTimer() {
+  const nombre = document.getElementById('timer-nombre').value.trim();
+  const fecha = document.getElementById('timer-fecha').value;
+  if (!nombre || !fecha) return toast('Rellena nombre y fecha', '#f44');
+
+  timerTarget = new Date(fecha).getTime();
+  if (timerTarget < Date.now()) return toast('La fecha debe ser en el futuro', '#f44');
+
+  if (timerInterval) clearInterval(timerInterval);
+
+  document.getElementById('timer-display').style.display = 'block';
+  document.getElementById('timer-evento-nombre').textContent = nombre;
+  document.getElementById('timer-fecha-texto').textContent = new Date(fecha).toLocaleString('es-ES');
+
+  function actualizar() {
+    const diff = timerTarget - Date.now();
+    if (diff <= 0) {
+      clearInterval(timerInterval);
+      document.getElementById('timer-countdown').textContent = '¡AHORA!';
+      document.getElementById('timer-countdown').style.color = '#E74C3C';
+      toast('⏰ El evento ' + nombre + ' ha comenzado!', '#E74C3C');
+      return;
+    }
+    const d = Math.floor(diff / 86400000);
+    const h = Math.floor((diff % 86400000) / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    let txt = '';
+    if (d > 0) txt += d + 'd ';
+    txt += String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    document.getElementById('timer-countdown').textContent = txt;
+    document.getElementById('timer-countdown').style.color = diff < 3600000 ? '#E74C3C' : diff < 86400000 ? '#F39C12' : '#4CAF50';
+  }
+
+  actualizar();
+  timerInterval = setInterval(actualizar, 1000);
+}
+
+function pararTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = null;
+  timerTarget = null;
+  document.getElementById('timer-display').style.display = 'none';
+  document.getElementById('timer-nombre').value = '';
+  document.getElementById('timer-fecha').value = '';
+}
 async function cargarVotaciones() {
   const data = await api('votaciones');
   const sugerencias = data.sugerencias || [];
